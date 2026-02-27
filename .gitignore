@@ -35,6 +35,7 @@ reports/
 *.html
 *.pdf
 ebs_upgrade_report_*
+example_report.*
 
 # Config
 *.local.json
