@@ -1,0 +1,42 @@
+# Sample configuration for EBS Upgrade Analyzer
+# Copy this to config.yaml and customize as needed
+
+# AWS Configuration
+aws:
+  # Default region to analyze
+  region: us-east-1
+  
+  # AWS profile to use (optional, uses default if not specified)
+  # profile: myprofile
+  
+  # Multiple regions to analyze (optional)
+  regions:
+    - us-east-1
+    - us-west-2
+    - eu-west-1
+
+# Report Configuration
+report:
+  # Default output format: text, json, or html
+  format: html
+  
+  # Output directory for reports
+  output_dir: ./reports
+  
+  # Include detailed platform information
+  detailed: true
+
+# Analysis Configuration
+analysis:
+  # Age threshold in days for warning
+  age_warning_threshold: 365
+  
+  # Last update threshold in days for info
+  update_info_threshold: 180
+  
+  # Deprecated platform indicators (customize based on your requirements)
+  deprecated_indicators:
+    - "Python 2.7"
+    - "Node.js 10"
+    - "Node.js 12"
+    - "Java 7"
