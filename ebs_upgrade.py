@@ -99,7 +99,6 @@ Examples:
             print("="*80 + "\n")
             
             # Use sample data
-            from sample_data import generate_sample_environments
             sample_envs = generate_sample_environments()
             
             # Create a mock analyzer and analyze the sample environments

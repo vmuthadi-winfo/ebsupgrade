@@ -188,7 +188,7 @@ class EBSAnalyzer:
             '2018', '2019', '2020',  # Old year versions
             'Python 2.7', 'Python 3.6',  # EOL Python versions
             'Node.js 10', 'Node.js 12',  # EOL Node versions
-            'Java 7', 'Java 8 running',  # Very old Java
+            'Java 7',  # Very old Java
         ]
         
         return any(indicator in stack_name for indicator in deprecated_indicators)
