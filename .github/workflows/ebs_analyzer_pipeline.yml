@@ -1,0 +1,157 @@
+name: EBS Upgrade Deep Dive Assessment Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      db_node:
+        description: 'Database Server (Hostname or IP)'
+        required: true
+        default: 'db_node.example.com'
+      app_node:
+        description: 'Application Server (Hostname or IP)'
+        required: true
+        default: 'app_node.example.com'
+      env_tier:
+        description: 'Environment to run against (e.g., PROD, UAT)'
+        required: true
+        default: 'UAT'
+
+jobs:
+  extract-db-metrics:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Stage Collector Script to DB Node
+        env:
+          DB_SERVER: ${{ github.event.inputs.db_node }}
+          SSH_USER: oracle
+        run: |
+          echo "Connecting to $DB_SERVER..."
+          scp -o StrictHostKeyChecking=no ebs_upgrade_analyzer_collector.sh $SSH_USER@$DB_SERVER:/tmp/
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$DB_SERVER "chmod +x /tmp/ebs_upgrade_analyzer_collector.sh"
+
+      - name: Execute Collector on DB Node
+        env:
+          DB_SERVER: ${{ github.event.inputs.db_node }}
+          SSH_USER: oracle
+          EBS_DB_USER: ${{ secrets.EBS_ANALYZER_USER }}
+          EBS_DB_PASS: ${{ secrets.EBS_ANALYZER_PASS }}
+          EBS_DB_TNS: ${{ secrets.EBS_ANALYZER_TNS }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$DB_SERVER << EOF
+            # Run without interactive prompts by exporting vars (Assumes script expects env vars or is modified to accept arguments)
+            cd /tmp
+            ./ebs_upgrade_analyzer_collector.sh <<< "\$EBS_DB_USER
+          \$EBS_DB_PASS
+          \$EBS_DB_TNS"
+          EOF
+
+      - name: Fetch DB Results
+        env:
+          DB_SERVER: ${{ github.event.inputs.db_node }}
+          SSH_USER: oracle
+        run: |
+          scp -o StrictHostKeyChecking=no $SSH_USER@$DB_SERVER:/tmp/ebs_upgrade_analyzer_data_*.txt ./db_node_data.txt
+          
+      - name: Upload DB Data Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: db-node-raw-data
+          path: ./db_node_data.txt
+          retention-days: 7
+
+  extract-app-metrics:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Stage Collector Script to App Node
+        env:
+          APP_SERVER: ${{ github.event.inputs.app_node }}
+          SSH_USER: applmgr
+        run: |
+          echo "Connecting to $APP_SERVER..."
+          scp -o StrictHostKeyChecking=no ebs_upgrade_analyzer_collector.sh $SSH_USER@$APP_SERVER:/tmp/
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER "chmod +x /tmp/ebs_upgrade_analyzer_collector.sh"
+
+      - name: Execute Collector on App Node
+        env:
+          APP_SERVER: ${{ github.event.inputs.app_node }}
+          SSH_USER: applmgr
+          # The app node might not need DB connection if we're just checking contexts, but our current script does DB too. 
+          # For a consolidated run, we pass dummy credentials or modify script to skip DB if requested.
+          # Here we provide dummy values or use secrets if we want full extraction from app tier too.
+          EBS_DB_USER: ${{ secrets.EBS_ANALYZER_USER }}
+          EBS_DB_PASS: ${{ secrets.EBS_ANALYZER_PASS }}
+          EBS_DB_TNS: ${{ secrets.EBS_ANALYZER_TNS }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER << EOF
+            cd /tmp
+            # Source environment if needed to pick up CONTEXT_FILE
+            # . /u01/install/APPS/EBSapps.env run
+            ./ebs_upgrade_analyzer_collector.sh <<< "\$EBS_DB_USER
+          \$EBS_DB_PASS
+          \$EBS_DB_TNS"
+          EOF
+
+      - name: Fetch App Results
+        env:
+          APP_SERVER: ${{ github.event.inputs.app_node }}
+          SSH_USER: applmgr
+        run: |
+          scp -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER:/tmp/ebs_upgrade_analyzer_data_*.txt ./app_node_data.txt
+          
+      - name: Upload App Data Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-node-raw-data
+          path: ./app_node_data.txt
+          retention-days: 7
+
+  generate-consolidated-report:
+    needs: [extract-db-metrics, extract-app-metrics]
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Download DB Data
+        uses: actions/download-artifact@v3
+        with:
+          name: db-node-raw-data
+          path: ./data/
+
+      - name: Download App Data
+        uses: actions/download-artifact@v3
+        with:
+          name: app-node-raw-data
+          path: ./data/
+
+      - name: Consolidate Output Files
+        run: |
+          # Combine the DB and App files. 
+          # Note: The current python script reads a single file. By concatenating them, 
+          # logic must be in place to handle potential duplicate [SECTION] tags, 
+          # or we modify the python to take multiple and merge dictionaries.
+          # For now, we append.
+          cat ./data/db_node_data.txt ./data/app_node_data.txt > consolidated_ebs_data.txt
+          echo "Files consolidated."
+
+      - name: Generate Executive Dashboard (HTML)
+        run: |
+          python generate_upgrade_report.py consolidated_ebs_data.txt
+
+      - name: Upload Final HTML Dashboard
+        uses: actions/upload-artifact@v3
+        with:
+          name: EBS-Upgrade-Impact-Report-${{ github.event.inputs.env_tier }}
+          path: EBS_Upgrade_Impact_Analysis_*.html
+          retention-days: 30

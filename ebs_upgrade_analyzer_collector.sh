@@ -16,14 +16,19 @@ echo "=========================================================" | tee -a $LOG_F
 echo " EBS & Database Upgrade Deep-Dive Analyzer " | tee -a $LOG_FILE
 echo "=========================================================" | tee -a $LOG_FILE
 
-# Prompt for least privileged user credentials
-echo -n "Enter the Analyzer Database Username [e.g. EBS_ANALYZER]: "
-read DB_USER
-echo -n "Enter the Analyzer Database Password: "
-read -s DB_PASS
-echo
-echo -n "Enter the TNS Connection String [e.g. PRODDB or localhost:1521/PRODDB]: "
-read DB_TNS
+# Support Non-Interactive CI/CD pipeline runs
+if [ -z "$DB_USER" ] || [ -z "$DB_PASS" ] || [ -z "$DB_TNS" ]; then
+    echo "Interactive Shell Mode"
+    echo -n "Enter the Analyzer Database Username [e.g. EBS_ANALYZER]: "
+    read DB_USER
+    echo -n "Enter the Analyzer Database Password: "
+    read -s DB_PASS
+    echo
+    echo -n "Enter the TNS Connection String [e.g. PRODDB or localhost:1521/PRODDB]: "
+    read DB_TNS
+else
+    echo "Pipeline Mode: Credentials detected via environment variables."
+fi
 
 echo "Starting collection at: $(date)" | tee -a $LOG_FILE
 echo "Output will be written to: $OUTPUT_FILE" | tee -a $LOG_FILE
@@ -49,6 +54,16 @@ echo "MAX_USER_PROCESSES|$(ulimit -u)" >> $OUTPUT_FILE
 echo "[SECTION_END:OS_ULIMIT]" >> $OUTPUT_FILE
 
 echo "2. Check Application Tier Context (if sourced)" | tee -a $LOG_FILE
+
+# Dynamic Context Discovery
+if [ -z "$CONTEXT_FILE" ] || [ ! -f "$CONTEXT_FILE" ]; then
+    P_CONTEXT=$(ps -eo args 2>/dev/null | grep -i 'context_file=' | grep -v 'grep' | grep '.xml' | awk -F'context_file=' '{print $2}' | awk '{print $1}' | head -1)
+    if [ -n "$P_CONTEXT" ] && [ -f "$P_CONTEXT" ]; then
+        CONTEXT_FILE=$P_CONTEXT
+        echo "Auto-Discovered Context File: $CONTEXT_FILE" | tee -a $LOG_FILE
+    fi
+fi
+
 echo "[SECTION_START:APP_CONTEXT_INFO]" >> $OUTPUT_FILE
 if [ -n "$CONTEXT_FILE" ] && [ -f "$CONTEXT_FILE" ]; then
     echo "CONTEXT_FILE_FOUND|YES" >> $OUTPUT_FILE
@@ -65,6 +80,32 @@ else
     echo "CONTEXT_FILE_FOUND|NO" >> $OUTPUT_FILE
 fi
 echo "[SECTION_END:APP_CONTEXT_INFO]" >> $OUTPUT_FILE
+
+echo "[SECTION_START:APP_TECHSTACK_INFO]" >> $OUTPUT_FILE
+if [ -n "$CONTEXT_FILE" ] && [ -f "$CONTEXT_FILE" ]; then
+    echo "ATG_VERSION|$(cat $CONTEXT_FILE | grep -i 's_atg_version' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+    echo "TOOLS_VERSION|$(cat $CONTEXT_FILE | grep -i 's_tools_version' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+    echo "OHS_VERSION|$(cat $CONTEXT_FILE | grep -i 's_ohs_version' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+    echo "JDK_TARGET|$(cat $CONTEXT_FILE | grep -i 's_jdktarget' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+    echo "CUSTOM_FILE_TOP|$(cat $CONTEXT_FILE | grep -i 's_custom_file_top' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+    echo "ADKEYSTORE|$(cat $CONTEXT_FILE | grep -i 's_adkeystore' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+    echo "TRUSTSTORE|$(cat $CONTEXT_FILE | grep -i 's_truststore' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+    echo "WEB_SSL_DIR|$(cat $CONTEXT_FILE | grep -i 's_web_ssl_directory' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+fi
+echo "[SECTION_END:APP_TECHSTACK_INFO]" >> $OUTPUT_FILE
+
+echo "[SECTION_START:APP_CUSTOM_FILES]" >> $OUTPUT_FILE
+if [ -n "$OA_HTML" ] && [ -d "$OA_HTML" ]; then
+    echo "ROGUE_OA_HTML_B64|$(find $OA_HTML -iname '*b64*' 2>/dev/null | wc -l)" >> $OUTPUT_FILE
+    echo "ROGUE_OA_HTML_XX_FILES|$(find $OA_HTML -iname 'xx*' -o -iname 'XX*' 2>/dev/null | wc -l)" >> $OUTPUT_FILE
+fi
+if [ -n "$OA_MEDIA" ] && [ -d "$OA_MEDIA" ]; then
+    echo "ROGUE_OA_MEDIA_XX_IMAGES|$(find $OA_MEDIA -iname 'xx*' -o -iname 'XX*' 2>/dev/null | wc -l)" >> $OUTPUT_FILE
+fi
+if [ -n "$JAVA_TOP" ] && [ -d "$JAVA_TOP" ]; then
+    echo "ROGUE_JAVA_TOP_XX_CLASSES|$(find $JAVA_TOP -iname 'xx*.class' -o -iname 'XX*.class' 2>/dev/null | wc -l)" >> $OUTPUT_FILE
+fi
+echo "[SECTION_END:APP_CUSTOM_FILES]" >> $OUTPUT_FILE
 
 echo "3. Creating SQL Payload for Deep-Dive Extraction" | tee -a $LOG_FILE
 
@@ -116,7 +157,7 @@ AND (
     fo.profile_option_name LIKE '%ENDECA%' OR
     fo.profile_option_name LIKE '%SOA%' OR
     fo.profile_option_name LIKE '%OBIEE%' OR
-    fo.profile_option_name IN ('APPS_FRAMEWORK_AGENT', 'APPS_AUTH_AGENT', 'ICX_FORMS_LAUNCHER')
+    fo.profile_option_name IN ('APPS_FRAMEWORK_AGENT', 'APPS_AUTH_AGENT', 'ICX_FORMS_LAUNCHER', 'ICX_SESSION_TIMEOUT')
 );
 prompt [SECTION_END:EBS_INTEGRATIONS_PROFILES]
 
@@ -170,6 +211,38 @@ prompt [SECTION_END:OPP_SIZING]
 prompt [SECTION_START:FORMS_SESSIONS]
 select count(*) from v$session where upper(module) like '%FORM%' or upper(program) like '%FRM%';
 prompt [SECTION_END:FORMS_SESSIONS]
+
+prompt [SECTION_START:DBA_DB_LINKS]
+select count(*), host from dba_db_links group by host;
+prompt [SECTION_END:DBA_DB_LINKS]
+
+prompt [SECTION_START:DBA_DIRECTORIES]
+select count(*) from dba_directories;
+prompt [SECTION_END:DBA_DIRECTORIES]
+
+prompt [SECTION_START:DBA_INVALID_OBJECTS]
+select count(*) from dba_objects where status = 'INVALID' and owner not in ('SYS','SYSTEM');
+prompt [SECTION_END:DBA_INVALID_OBJECTS]
+
+prompt [SECTION_START:ADOP_AD_ZD_SCHEMAS]
+select count(distinct owner) from dba_objects where object_name like 'AD_ZD%';
+prompt [SECTION_END:ADOP_AD_ZD_SCHEMAS]
+
+prompt [SECTION_START:WORKFLOW_MAILER]
+select p.parameter_name ||'|'|| v.parameter_value
+from apps.fnd_svc_comp_param_vals v, apps.fnd_svc_comp_params_b p, apps.fnd_svc_components c
+where c.component_id = v.component_id and p.parameter_id = v.parameter_id and c.component_name like '%Mailer%'
+and p.parameter_name in ('OUTBOUND_SERVER', 'REPLYTO', 'INBOUND_SERVER', 'SMTP_PORT', 'SMTP_USERNAME', 'SSL_TRUST_STORE');
+prompt [SECTION_END:WORKFLOW_MAILER]
+
+prompt [SECTION_START:CUSTOM_WORKFLOWS]
+select name ||'|'|| count(*) from apps.wf_item_types where name like 'XX%' group by name;
+prompt [SECTION_END:CUSTOM_WORKFLOWS]
+
+prompt [SECTION_START:XML_PUBLISHER_DELIVERY]
+select 'XDO_TEMPLATES' ||'|'|| default_output_type ||'|'|| count(*) from apps.xdo_templates_b where template_code like 'XX%' group by default_output_type;
+prompt [SECTION_END:XML_PUBLISHER_DELIVERY]
+
 
 prompt [SECTION_START:CEMLI_CONCURRENT_PROGRAMS]
 select fee.execution_method_code ||'|'|| decode(fee.execution_method_code, 'H', 'Host', 'J', 'Java SP', 'K', 'Java', 'P', 'Oracle Reports', 'E', 'Perl', 'Q', 'SQL*Plus', 'A', 'Spawned', 'I', 'PL/SQL', 'L', 'SQL*Loader', fee.execution_method_code) ||'|'|| count(*)

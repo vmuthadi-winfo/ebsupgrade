@@ -92,6 +92,14 @@ def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size):
     if has_utl:
          challenges.append("<b>UTL_FILE_DIR Desupported</b>: Oracle Database 19c totally desupports this initialization parameter. All custom PL/SQL utilizing this must be refactored to use standard Database Directory objects managed by the APPS schema (via `txkCreateDirObject.sql`).")
 
+    # DB Links and Invalid Objects
+    db_links = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
+    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
+    if int(invalid_objs) > 100:
+        challenges.append(f"<b>Database Hygiene</b>: The source database has {invalid_objs} invalid objects. The 12.2 Edition-based Redefinition pre-reqs demand a clean compilation state before enablement.")
+    if db_links > 15:
+        challenges.append(f"<b>Integration Sprawl</b>: Detected {db_links} active Database Links. High integration coupling will drastically extend testing cycles during the Multitenant database platform migration.")
+
     # DB Versions
     if '11' in db_version or '12.1' in db_version:
         challenges.append("<b>Database Container Migration</b>: The Database upgrade to 19c+ mandates converting the non-CDB architecture to the Multitenant (CDB/PDB) architecture required by modern Oracle releases.")
@@ -145,6 +153,88 @@ def build_roadmap():
         </div>
     </div>
     """
+
+def calculate_complexity_score(data, db_params, active_users, custom_objs, custom_schemas_cnt, db_size, os_info, ebs_version, profiles):
+    # CD-1: Infrastructure
+    cd1_score = 0
+    os_name = os_info.get('OS_RELEASE', '').lower()
+    if 'linux' not in os_name: cd1_score = 5
+    elif '7' in os_name or '6' in os_name: cd1_score = 3
+
+    # CD-2: Database Upgrade
+    cd2_score = 0
+    db_version_info = safe_get(data, 'DB_VERSION', [['Unknown', '12', 'Unknown', 'Unknown']])[0]
+    db_ver = db_version_info[1] if len(db_version_info) > 1 else '12'
+    if '11' in db_ver or '12' in db_ver: cd2_score = 3
+    if float(db_size) > 1000: cd2_score += 2
+    if cd2_score > 5: cd2_score = 5
+
+    # CD-3: EBR Readiness
+    cd3_score = 0
+    adzd_schemas = int(safe_get(data, 'ADOP_AD_ZD_SCHEMAS', [['0']])[0][0])
+    if custom_schemas_cnt > 10 and adzd_schemas == 0: cd3_score = 5
+    elif custom_schemas_cnt > 0: cd3_score = 3
+
+    # CD-4: Customization Footprint (CEMLI)
+    cd4_score = 0
+    if custom_objs > 5000: cd4_score = 5
+    elif custom_objs > 1000: cd4_score = 3
+
+    # CD-5: Integrations
+    cd5_score = 0
+    db_links_count = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
+    if db_links_count > 20: cd5_score = 5
+    elif db_links_count > 5: cd5_score = 3
+    
+    # Check for SOA/APEX in profiles for +2
+    for row in profiles:
+        if len(row) > 0 and ('SOA' in row[0].upper() or 'APEX' in row[0].upper()):
+            cd5_score = min(cd5_score + 2, 5)
+
+    # CD-6: Security & SSO
+    cd6_score = 0
+    for row in profiles:
+        if len(row) > 0 and ('SSO' in row[0].upper() or 'OAM' in row[0].upper()):
+            cd6_score = 5
+            break
+
+    # CD-7: Functional Blast Radius
+    cd7_score = 0
+    users = 0
+    try: users = int(active_users)
+    except: pass
+    if users > 1500: cd7_score = 5
+    elif users > 400: cd7_score = 3
+
+    total_score = cd1_score + cd2_score + cd3_score + cd4_score + cd5_score + cd6_score + cd7_score
+    
+    # Complexity Normalization mapping
+    size_box = "Small"
+    size_color = "--success-green"
+    if total_score >= 25: 
+        size_box = "Very Large"
+        size_color = "--danger-red"
+    elif total_score >= 17:
+        size_box = "Large"
+        size_color = "--warning-amber"
+    elif total_score >= 9:
+        size_box = "Medium"
+        size_color = "--primary-blue"
+        
+    return {
+        'total': total_score,
+        'size': size_box,
+        'color': size_color,
+        'factors': {
+            'CD-1 Infrastructure': cd1_score,
+            'CD-2 Database': cd2_score,
+            'CD-3 EBR Readiness': cd3_score,
+            'CD-4 CEMLI Footprint': cd4_score,
+            'CD-5 Integrations': cd5_score,
+            'CD-6 Security/SSO': cd6_score,
+            'CD-7 Functional Impact': cd7_score
+        }
+    }
 
 def generate_sizing_analytics(db_params, active_users, opp_data, forms_data):
     cpu_count = 8 # Default minimum
@@ -233,16 +323,13 @@ def build_html(data):
     integrations = determine_integrations(profiles)
     rules_challenges = run_prebuilt_rules(db_version_info[1] if len(db_version_info)>1 else '', ebs_version, db_params, os_info, db_size)
     
-    # Process CEMLI Details
-    cemli_cp = safe_get(data, 'CEMLI_CONCURRENT_PROGRAMS', [])
-    forms_count = safe_get(data, 'CEMLI_FORMS_AND_PAGES', [['', '0']])[0][1]
-    oaf_count = safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', [['', '0']])[0][1]
-    alerts_count = safe_get(data, 'CEMLI_ALERTS', [['', '0']])[0][1]
+    # Process New Extracts
+    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
+    db_links = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
+    directories = safe_get(data, 'DBA_DIRECTORIES', [['0']])[0][0]
     
-    # Process Sizing Details
-    opp_data = safe_get(data, 'OPP_SIZING', [['1', '1']])
-    forms_data = safe_get(data, 'FORMS_SESSIONS', [['0']])
-    sizing_analytics = generate_sizing_analytics(db_params, active_users, opp_data, forms_data)
+    # Calculate Complexity
+    complexity_payload = calculate_complexity_score(data, db_params, active_users, custom_objs, custom_schemas, db_size, os_info, ebs_version, profiles)
     
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -250,7 +337,7 @@ def build_html(data):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EBS Deep-Dive Upgrade Assessment</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {{ --bg-color:#f4f7f6; --text-color:#333; --card-bg:#fff; --primary-blue:#0A3A6B; --light-blue:#ECF4F9; --accent-orange:#FF7B00; --danger-red:#D93025; --warning-amber:#F29900; --success-green:#188038; --border-grey:#e0e0e0; }}
         body {{ font-family:'Inter', sans-serif; background-color:var(--bg-color); color:var(--text-color); margin:0; padding:0; line-height:1.6; scroll-behavior: smooth; }}
@@ -270,6 +357,20 @@ def build_html(data):
         .metric-card.warning {{ border-left-color:var(--warning-amber); }} .metric-card.warning::after {{ background: var(--warning-amber); }}
         .metric-title {{ font-size:13px; color:#777; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; margin-bottom: 5px; }}
         .metric-value {{ font-size:32px; font-weight:700; color:var(--text-color); margin:5px 0 15px 0; }}
+        
+        .c-engine-section {{ background:#1E293B; border-radius:12px; padding:35px; color:#fff; box-shadow:0 10px 30px rgba(0,0,0,0.15); margin-bottom:40px; display: flex; align-items: center; justify-content: space-between; gap: 40px; }}
+        .c-engine-left {{ flex: 1; }}
+        .c-engine-right {{ text-align: right; background: rgba(0,0,0,0.2); padding: 25px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); min-width: 250px; }}
+        .c-engine-score {{ font-size: 58px; font-weight: 800; line-height: 1; margin: 10px 0; color: #38BDF8; }}
+        .c-size-badge {{ display: inline-block; padding: 8px 15px; font-size: 14px; font-weight: 700; border-radius: 30px; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; background: rgba(255,255,255,0.1); color: #fff; }}
+        
+        .cd-bars {{ margin-top: 25px; }}
+        .cd-row {{ display: flex; align-items: center; margin-bottom: 12px; font-size: 13px; color: #CBD5E1; font-weight: 500; }}
+        .cd-label {{ width: 180px; }}
+        .cd-track {{ flex: 1; background: #334155; height: 12px; border-radius: 6px; overflow: hidden; margin: 0 15px; }}
+        .cd-fill {{ height: 100%; border-radius: 6px; transition: width 1s; }}
+        .cd-val {{ width: 30px; text-align: right; font-weight: 700; color: #fff; }}
+
         
         .section {{ background:var(--card-bg); border-radius:12px; padding:35px; margin-bottom:40px; box-shadow:0 4px 15px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }}
         .section-header {{ display: flex; align-items: center; border-bottom:2px solid var(--light-blue); padding-bottom:15px; margin-bottom: 25px; }}
@@ -319,11 +420,35 @@ def build_html(data):
         <a href="#integrations">6. Enterprise Integrations</a>
         <a href="#workload">7. Database Workloads</a>
         <a href="#sizing">8. Target Sizing & Capacity</a>
+        <a href="#techstack">9. App TechStack & Security</a>
+        <a href="#workflow">10. Workflow & Mailer Footprint</a>
     </div>
 
     <div class="main-content">
         <!-- Dashboard Summary -->
         <div id="executive" class="section" style="padding: 0; background: transparent; box-shadow: none; border: none; margin-bottom: 20px;">
+            
+            <div class="c-engine-section">
+                <div class="c-engine-left">
+                    <h2 style="margin:0 0 10px 0; font-size: 24px; color: #F8FAFC;">AI Upgrade Complexity Engine</h2>
+                    <p style="margin:0; color:#94A3B8; font-size:15px; max-width: 600px;">The assessment engine processed {len(data.keys())} configuration metrics to mathematically compute the technical effort required for this transition to Oracle EBS 12.2 / 19c.</p>
+                    
+                    <div class="cd-bars">
+                        {''.join(f'''<div class="cd-row">
+                            <div class="cd-label">{k}</div>
+                            <div class="cd-track"><div class="cd-fill" style="width: {(v/5)*100}%; background: {'#10B981' if v<=2 else '#F59E0B' if v==3 else '#EF4444'};"></div></div>
+                            <div class="cd-val">{v}/5</div>
+                        </div>''' for k, v in complexity_payload['factors'].items())}
+                    </div>
+                </div>
+                <div class="c-engine-right">
+                    <div style="font-size: 13px; color: #94A3B8; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Calculated Effort Score</div>
+                    <div class="c-engine-score">{complexity_payload['total']}</div>
+                    <div style="font-size: 13px; color: #64748B;">/ 35 Max Points</div>
+                    <div class="c-size-badge" style="border: 1px solid var({complexity_payload['color']}); color: var({complexity_payload['color']});">Blast Radius: {complexity_payload['size']}</div>
+                </div>
+            </div>
+
             <div class="grid-summary">
                 <div class="metric-card">
                     <div class="metric-title">Source Application</div>
@@ -391,9 +516,13 @@ def build_html(data):
                     <div class="cemli-num">{oaf_count}</div>
                     <div class="cemli-label">OAF Mds Personalizations</div>
                 </div>
-                <div class="cemli-item">
-                    <div class="cemli-num">{alerts_count}</div>
-                    <div class="cemli-label">Custom Wait Alerts</div>
+                <div class="cemli-item" style="border-top: 5px solid var(--warning-amber);">
+                    <div class="cemli-num">{safe_get(data, 'APP_CUSTOM_FILES', [['0', '0']])[1][1] if len(safe_get(data, 'APP_CUSTOM_FILES', [])) > 1 else '0'}</div>
+                    <div class="cemli-label">Rogue HTML/image Overrides</div>
+                </div>
+                <div class="cemli-item" style="border-top: 5px solid var(--danger-red);">
+                    <div class="cemli-num">{safe_get(data, 'APP_CUSTOM_FILES', [['0', '0']])[3][1] if len(safe_get(data, 'APP_CUSTOM_FILES', [])) > 3 else '0'}</div>
+                    <div class="cemli-label">Custom Java Class Drops</div>
                 </div>
             </div>
 
@@ -484,6 +613,36 @@ def build_html(data):
                 <li style="margin-bottom: 8px;"><b>Oracle Forms Heap:</b> 12.2 shifts Forms to the WLS architecture. Expect +30% server-side memory footprint per active Form session than what was seen under 11g/12.1.</li>
                 <li style="margin-bottom: 8px;"><b>Linux Database HugePages:</b> Whenever Target DB Memory (SGA) exceeds 30GB, enabling Linux HugePages is strictly required to prevent catastrophic kernel CPU swapping on Enterprise systems allocating 19c limits.</li>
             </ul>
+        </div>
+        
+        <div id="techstack" class="section">
+            <div class="section-header">
+                <h2>Application TechStack & Security Profiling</h2>
+            </div>
+            <p>EBS uses a tightly coupled technology stack containing internal JDKs, OC4J servers, and HTTP listeners. Any custom file deployed locally (outside patching standards) onto the App filesystem must be migrated.</p>
+            
+            <h3>Base TechStack Context (12.1.3 Baseline)</h3>
+            {render_table(safe_get(data, 'APP_TECHSTACK_INFO', []), ["Topology Property", "Discovered Deployment Path / Version"])}
+            
+            <h3>File-System Rogue Customizations (OS `find` extraction)</h3>
+            <p style="font-size:13px; color:#475569;">Includes unmanaged `b64` web logic, rogue custom images missing personalization hooks, and manually dropped `.class` payloads in `$JAVA_TOP` missing standards.</p>
+            {render_table(safe_get(data, 'APP_CUSTOM_FILES', []), ["File Search Target", "Discovered Quantity"])}
+        </div>
+        
+        <div id="workflow" class="section">
+            <div class="section-header">
+                <h2>Oracle Workflow & Output Delivery Integrations</h2>
+            </div>
+            <p>Critical business transaction flows often stall during upgrades if SMTP/IMAP connections or XML generation templates fail on new Java Virtual Machines.</p>
+            
+            <h3>Notification Mailer & Network Parameters</h3>
+            {render_table(safe_get(data, 'WORKFLOW_MAILER', []), ["Component Parameter", "Network Binding"])}
+            
+            <h3>Custom EBS Workflow Item Types</h3>
+            {render_table(safe_get(data, 'CUSTOM_WORKFLOWS', []), ["Workflow Item Type", "Deplolyment Scope"])}
+
+            <h3>XML Publisher (XDO) Template Demands</h3>
+            {render_table(safe_get(data, 'XML_PUBLISHER_DELIVERY', []), ["Engine", "Delivery Format", "Document Volumes"])}
         </div>
 
     </div>

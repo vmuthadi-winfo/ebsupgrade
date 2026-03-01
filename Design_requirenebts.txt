@@ -1,0 +1,258 @@
+
+Oracle E-Business Suite (EBS) Upgrade – AI Input Document
+Scope: Upgrade from EBS 12.1.3 + Database 12c (Linux, SSO via Ping/SSOGEN, customizations, integrations, LB) to EBS 12.2.15 + Database 19c / 23ai.
+Purpose of this document: This document is designed to be direct input to an AI system (LLM / rules engine) to:
+
+Analyze an existing EBS environment
+Identify technical, functional, and integration impacts
+Quantify complexity and effort in a defensible, repeatable way
+Generate a comprehensive Upgrade Impact Assessment Report
+The content is intentionally explicit, structured, and non-ambiguous so an AI can reason deterministically.
+
+
+1. Upgrade Context & Assumptions
+1.1 Source Environment (Typical)
+
+Oracle EBS Release: 12.1.3
+Database: Oracle Database 12c
+OS: Linux (OEL/RHEL – version to be detected)
+Authentication: SSO integrated with PingFederate via SSOGEN
+Architecture:Load Balancer (F5 / NGINX / OCI LB / Apache)
+SSL termination (LB or OHS)
+Possible DMZ nodes
+Customizations:OAF extensions
+Oracle Forms / Reports
+Custom PL/SQL (CEMLI/RICEW)
+BI Publisher
+APEX integrations
+Integrations:DB Links
+File-based interfaces
+SOA / REST / schedulers
+1.2 Target Environment
+
+Oracle EBS Release: 12.2.15
+Database: 19c (mandatory) → 23ai (optional/future-ready)
+Architecture requirements:Dual application file system (fs1 / fs2)
+Non-editioned file system (fs_ne)
+Edition-Based Redefinition (EBR)
+Online patching using ADOP
+Middleware:WebLogic Server + Oracle HTTP Server (OHS)
+Authentication:Re-implemented SSO (Ping / OAM / IDCS / SSOGEN – OSSO not supported)
+
+
+2. Core Architectural Changes (Non-Negotiable)
+The AI must treat these as structural changes, not optional enhancements.
+2.1 Application Tier
+
+Single APPL_TOP (12.1) → Dual File System (12.2)
+OC4J → WebLogic Server
+Manual patching → Online patching (ADOP lifecycle)
+2.2 Database Tier
+
+No EBR → Edition-Based Redefinition required
+Custom schemas must be edition-enabled
+DB upgrade path:12c → 19c (mandatory)
+19c → 23ai (optional, but requires CDB/PDB)
+2.3 Security / SSO
+
+Legacy OSSO/mod_osso not supported
+SSO must be re-implemented
+Session coordination between EBS, WebLogic, OHS, and IdP required
+
+
+3. Complexity & Effort Estimation Model (AI Scoring Engine)
+3.1 Design Principle
+Effort is derived from environment characteristics, not guessed timelines.
+The AI must compute effort using measurable complexity drivers, each scored 0–5.
+
+
+3.2 Complexity Drivers (Scorable Inputs)
+CD-1: Infrastructure & Topology Change
+Score based on detected changes:
+
+0: Same servers, single node, no LB/SSL changes
+3: OS upgrade, minor topology change
+5: New HA (RAC/Data Guard), new LB, DR build, cloud migration
+Evidence sources:
+
+OS version
+Node count
+LB configuration
+DR presence
+
+
+CD-2: Database Upgrade Complexity
+
+0: DB already 19c certified, aligned with EBS 12.2
+3: 12c → 19c, minimal custom objects
+5: 12c → 19c + multitenant conversion + performance risk + integration refactoring
+Evidence sources:
+
+DB version
+CDB/PDB status
+Usage of deprecated features (e.g., UTL_FILE_DIR)
+Custom schemas
+
+
+CD-3: Online Patching & EBR Readiness
+
+0: Minimal custom schemas, no EBR violations
+3: Few violations, manageable remediation
+5: Many violations, unregistered schemas, hard dependencies on EBS code
+Evidence sources:
+
+Online Patching Readiness Report
+ADZDPSUM / ADZDPMAN outputs
+GSCC report
+
+
+CD-4: Customization Footprint (CEMLI/RICEW)
+
+0: Very few custom objects
+3: Moderate customizations, mostly isolated
+5: Heavy customizations across Forms, OAF, PL/SQL, BI, APEX
+Evidence sources:
+
+Custom schemas
+Custom TOPs (XX*)
+Object counts by type
+
+
+CD-5: Integrations Complexity
+
+0: Few outbound/inbound interfaces
+3: Several DB links, file-based jobs
+5: SOA, APEX, REST, schedulers, many DB links
+Evidence sources:
+
+DB links inventory
+Scheduler jobs
+External endpoints
+
+
+CD-6: Security & SSO Re-implementation
+
+0: Local authentication only
+3: Simple SSO without MFA
+5: PingFederate + MFA + LB/SSL/session tuning
+Evidence sources:
+
+Current auth configuration
+IdP type
+SSL termination points
+
+
+CD-7: Functional & Testing Blast Radius
+
+0: Few modules, low usage
+3: Core modules, moderate users
+5: Many modules, high concurrency, business-critical flows
+Evidence sources:
+
+Enabled modules
+User counts
+Concurrent usage
+
+
+3.3 Complexity Normalization
+Total Complexity Score = Sum(CD-1 … CD-7)
+Map to size:
+
+0–8 → Small
+9–16 → Medium
+17–24 → Large
+25+ → Very Large
+This size drives relative effort, not calendar duration.
+
+
+4. Workstream-Based Effort Model (No Calendar Guessing)
+Effort must be distributed across standard upgrade workstreams.
+4.1 Mandatory Workstreams
+
+Infrastructure & Platform Readiness
+Database Upgrade & Remediation
+EBS Technical Upgrade (12.2 architecture)
+Customization Remediation (EBR + Online Patching)
+Security & SSO Re-implementation
+Integrations Validation & Fixes
+Testing (SIT, UAT, Performance)
+Cutover & Hypercare
+Each workstream effort is weighted by relevant complexity drivers.
+
+
+5. Automated Data Collection (AI Tool Inputs)
+5.1 Application Tier Collector
+
+EBS release and patch levels (AD, TXK, ATG)
+Context file inventory
+File system layout (fs1/fs2/fs_ne)
+adop configuration
+Custom TOPs and code inventory
+5.2 Database Collector
+
+DB version and patch level
+CDB/PDB status
+Custom schemas
+Invalid objects
+DB links
+Directory objects
+5.3 Integrations Collector
+
+DB links + hostnames
+Scheduler jobs
+File drop locations
+SOA/APEX endpoints
+5.4 Security / SSO Collector
+
+Authentication method
+IdP details
+SSL certificates
+Session timeout configuration
+
+
+6. Oracle Analyzer Outputs (Mandatory Inputs)
+The AI must ingest raw outputs, not summaries:
+
+Online Patching Readiness Report
+ETCC (DB + MT)
+EBS Upgrade Analyzer (RUP option)
+DB Upgrade Analyzer (19c / 23ai)
+These define Oracle-supported boundaries and blockers.
+
+
+7. Rules Engine (Deterministic Findings)
+Before LLM summarization, apply explicit rules:
+Examples:
+
+If unregistered custom schemas exist → Blocker
+If DB is < 19c → Mandatory DB upgrade
+If DB links reference invalid hosts → Integration risk
+If APEX schema not edition-enabled → Online patching incompatibility
+Rules must produce:
+
+Blockers
+Risks
+Required remediation actions
+
+
+8. AI-Generated Outputs (Final Report Sections)
+The AI must generate:
+
+Executive Summary
+Current vs Target Compatibility Matrix
+Impact Analysis by Layer (Infra, DB, App, Security, Integrations)
+Customization Remediation Plan
+Complexity & Effort Summary (by workstream)
+Risk Register
+Recommended Upgrade Approach Options
+
+
+9. Design Philosophy
+
+Treat EBS 12.2 upgrade as platform transformation, not a patch
+Online patching & EBR are first-class constraints
+Effort estimation must be evidence-based and repeatable
+AI augments analysis; rules and Oracle analyzers define truth
+
+
+End of AI Input Document
