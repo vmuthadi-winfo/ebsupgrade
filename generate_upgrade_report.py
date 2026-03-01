@@ -269,7 +269,7 @@ def calculate_effort_estimation(complexity_payload, custom_objs, db_size, active
         users = int(active_users)
         if users > 2000:
             effort['testing'] = int(effort['testing'] * 1.3)
-    except:
+    except (ValueError, TypeError):
         pass
     
     total_weeks = sum(effort.values())
@@ -314,7 +314,7 @@ def generate_risk_register(data, complexity_payload, os_info, db_version, custom
             risks.append({'id': 'R08', 'category': 'Database', 'risk': f'{invalid_objs} invalid objects require remediation', 'severity': 'High', 'impact': 'Medium', 'mitigation': 'Run utlrp.sql and resolve compilation errors'})
         elif int(invalid_objs) > 100:
             risks.append({'id': 'R09', 'category': 'Database', 'risk': f'{invalid_objs} invalid objects detected', 'severity': 'Medium', 'impact': 'Low', 'mitigation': 'Review and compile before upgrade'})
-    except:
+    except (ValueError, TypeError):
         pass
     
     # Complexity-based risks

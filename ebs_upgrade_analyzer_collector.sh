@@ -318,7 +318,7 @@ select log_mode ||'|'|| force_logging ||'|'|| supplemental_log_data_min from v$d
 prompt [SECTION_END:DB_ARCHIVE_MODE]
 
 prompt [SECTION_START:DB_FEATURES_USED]
-select name ||'|'|| detected_usages ||'|'|| currently_used from dba_feature_usage_statistics where detected_usages > 0 and rownum <= 30 order by detected_usages desc;
+select * from (select name ||'|'|| detected_usages ||'|'|| currently_used from dba_feature_usage_statistics where detected_usages > 0 order by detected_usages desc) where rownum <= 30;
 prompt [SECTION_END:DB_FEATURES_USED]
 
 prompt [SECTION_START:INVALID_OBJECTS_DETAIL]
