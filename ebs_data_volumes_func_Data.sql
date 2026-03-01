@@ -13,7 +13,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM po_headers_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL
@@ -31,7 +31,7 @@ SELECT 'Transaction'          category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM po_lines_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL
@@ -45,7 +45,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM po_requisition_headers_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL
@@ -59,7 +59,7 @@ SELECT 'Transaction'          category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM po_requisition_lines_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
   UNION ALL
@@ -73,7 +73,7 @@ SELECT 'Master Data'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ap_suppliers 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL
@@ -87,7 +87,7 @@ SELECT 'Transaction'          category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ap_supplier_sites_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
 
@@ -103,7 +103,7 @@ SELECT 'Transaction'             category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ap_invoices_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL 
@@ -117,7 +117,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ap_invoice_lines_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL
@@ -131,7 +131,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ap_expense_report_headers_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL 
@@ -145,7 +145,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ap_expense_report_lines_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
   UNION ALL 
@@ -159,7 +159,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ap_checks_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  
@@ -182,7 +182,7 @@ SELECT 'Transaction'             category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM pa_projects_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL 
@@ -207,7 +207,7 @@ SELECT 'Transaction'             category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM pa_tasks 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
   UNION ALL 
@@ -232,7 +232,7 @@ SELECT 'Transaction'             category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM pa_expenditure_items_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL
@@ -247,7 +247,7 @@ SELECT 'Transaction'             category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM pa_agreements_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  
@@ -263,7 +263,7 @@ SELECT 'Transaction'             category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ra_customer_trx_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  UNION ALL 
@@ -277,7 +277,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ra_customer_trx_lines_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
   UNION ALL 
@@ -291,7 +291,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM ar_cash_receipts_all 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
    UNION ALL 
@@ -305,7 +305,7 @@ SELECT 'Master Data'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM hz_cust_accounts 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  
@@ -322,7 +322,7 @@ SELECT 'Master Data'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM per_all_people_f 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
  
@@ -348,7 +348,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(creation_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM gl_je_lines 
-                 WHERE creation_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE creation_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(creation_date,'MON-YY'))) monthly_volume
  FROM dual
   UNION ALL
@@ -362,7 +362,7 @@ SELECT 'Transaction'     category
           FROM (SELECT TO_CHAR(last_update_date,'MON-YY')
                       ,COUNT(1)         monthly_volume
                   FROM gl_code_combinations 
-                 WHERE last_update_date > ADD_MONTHS(TO_DATE(TRUNC(SYSDATE,'MM')),-12)
+                 WHERE last_update_date > ADD_MONTHS(TRUNC(SYSDATE,'MM'),-12)
               GROUP BY TO_CHAR(last_update_date,'MON-YY'))) monthly_volume
  FROM dual
  

@@ -18,7 +18,9 @@ def parse_data(file_path):
                 data[current_section].append(line.split('|'))
     return data
 
-def safe_get(data, section, default_row=[['N/A']]):
+def safe_get(data, section, default_row=None):
+    if default_row is None:
+        default_row = [['N/A']]
     val = data.get(section, [])
     return val if val else default_row
 
@@ -49,7 +51,7 @@ def determine_integrations(profiles):
     }
     
     fwk_agent = ""
-    auth_agent = ""
+    servlet_agent = ""
 
     for row in profiles:
         if len(row) < 2: continue
@@ -57,27 +59,28 @@ def determine_integrations(profiles):
         if not value.strip(): continue
 
         if name == 'APPS_FRAMEWORK_AGENT': fwk_agent = value
-        if name == 'APPS_AUTH_AGENT': auth_agent = value
+        if name == 'APPS_SERVLET_AGENT': servlet_agent = value
         
         if 'APEX' in name:
             integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}. Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
         if 'ECC' in name:
-            integ['ECC'] = {'status': 'Active', 'desc': f'Command Center profiles found.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
-        if 'SOA' in name:
-            integ['SOA_ISG'] = {'status': 'Active', 'desc': 'SOA/ISG detected. Integrated SOA Gateway has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
-        if 'OBIEE' in name:
+            integ['ECC'] = {'status': 'Active', 'desc': 'Command Center profiles found.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
+        if 'SOA' in name or 'REST' in name or 'ISG' in name:
+            integ['SOA_ISG'] = {'status': 'Active', 'desc': 'SOA/ISG/REST detected. Integrated SOA Gateway has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
+        if 'OBIEE' in name or 'OAC' in name:
             integ['OBIEE'] = {'status': 'Active', 'desc': 'OBIEE / OAC URL Profiles defined.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
         if 'ENDECA' in name:
             integ['ENDECA'] = {'status': 'Active', 'desc': 'Endeca extensions detected.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
-        if 'SSO' in name or 'OAM' in name:
-            integ['SSO'] = {'status': 'Active', 'desc': 'SSO/OAM configurations detected.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
+        if 'SSO' in name or 'OAM' in name or name == 'FND_SSO_COOKIE_DOMAIN' or name == 'APPS_SSO_PROFILE':
+            integ['SSO'] = {'status': 'Active', 'desc': 'SSO/OAM configurations detected.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 12.2.1.4+ on Weblogic 14c (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
             
-    if auth_agent and fwk_agent and auth_agent != fwk_agent:
-         integ['SSO'] = {'status': 'Active', 'desc': 'Potential SSO / Access Gate detected via disjointed Auth & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
+    # Check if agents differ indicating external SSO
+    if servlet_agent and fwk_agent and servlet_agent != fwk_agent:
+         integ['SSO'] = {'status': 'Active', 'desc': 'Potential SSO / Access Gate detected via disjointed Servlet & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
 
     return integ
 
-def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size):
+def run_prebuilt_rules(data, db_version, ebs_version, db_params, os_info, db_size):
     challenges = []
     
     # OS Check
@@ -278,28 +281,29 @@ def generate_sizing_analytics(db_params, active_users, opp_data, forms_data):
             break
 
     recom_mem = max(int(db_mem * 1.2), 16)
+    min_cores = max(cpu_count, 4)
     
     html = f"""
     <div class="grid-summary">
         <div class="metric-card" style="border-left-color: var(--primary-blue)">
             <div class="metric-title">Database Core Analytics</div>
-            <div class="metric-value">{{max(cpu_count, 4)}} Cores Minimum</div>
-            <div style="font-size:13px; color:#64748b;">Includes 19c buffer cache overhead. (Source: {{cpu_count}} CPU)</div>
+            <div class="metric-value">{min_cores} Cores Minimum</div>
+            <div style="font-size:13px; color:#64748b;">Includes 19c buffer cache overhead. (Source: {cpu_count} CPU)</div>
         </div>
         <div class="metric-card" style="border-left-color: var(--warning-amber)">
             <div class="metric-title">Database target Memory</div>
-            <div class="metric-value">{{recom_mem}} GB SGA/PGA</div>
+            <div class="metric-value">{recom_mem} GB SGA/PGA</div>
             <div style="font-size:13px; color:#64748b;">Target 20% growth over existing limits to support PDB dictionaries.</div>
         </div>
         <div class="metric-card" style="border-left-color: var(--success-green)">
             <div class="metric-title">EBS 12.2 OAF Load-Balancing</div>
-            <div class="metric-value">{{wls_servers}} WLS oacore JVMs</div>
-            <div style="font-size:13px; color:#64748b;">Based on {{users}} Active Users (2GB memory per instance)</div>
+            <div class="metric-value">{wls_servers} WLS oacore JVMs</div>
+            <div style="font-size:13px; color:#64748b;">Based on {users} Active Users (2GB memory per instance)</div>
         </div>
         <div class="metric-card" style="border-left-color: var(--primary-blue)">
-            <div class="metric-title">Forms & Output Processing</div>
-            <div class="metric-value">{{forms_servers}} Forms | {{opp_target}} OPP</div>
-            <div style="font-size:13px; color:#64748b;">Forms: {{forms_sessions}} Peak Sessions. OPP JVM Heap: {{opp_memory}}GB.</div>
+            <div class="metric-title">Forms &amp; Output Processing</div>
+            <div class="metric-value">{forms_servers} Forms | {opp_target} OPP</div>
+            <div style="font-size:13px; color:#64748b;">Forms: {forms_sessions} Peak Sessions. OPP JVM Heap: {opp_memory}GB.</div>
         </div>
     </div>
     """
@@ -321,12 +325,26 @@ def build_html(data):
     nodes = safe_get(data, 'EBS_NODES', [])
     profiles = safe_get(data, 'EBS_INTEGRATIONS_PROFILES', [])
     integrations = determine_integrations(profiles)
-    rules_challenges = run_prebuilt_rules(db_version_info[1] if len(db_version_info)>1 else '', ebs_version, db_params, os_info, db_size)
+    rules_challenges = run_prebuilt_rules(data, db_version_info[1] if len(db_version_info)>1 else '', ebs_version, db_params, os_info, db_size)
     
     # Process New Extracts
     invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
     db_links = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
     directories = safe_get(data, 'DBA_DIRECTORIES', [['0']])[0][0]
+    
+    # CEMLI counts from extracted data
+    forms_data_raw = safe_get(data, 'CEMLI_FORMS_AND_PAGES', [])
+    forms_count = forms_data_raw[0][1] if forms_data_raw and len(forms_data_raw[0]) > 1 else '0'
+    
+    oaf_data_raw = safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', [])
+    oaf_count = oaf_data_raw[0][1] if oaf_data_raw and len(oaf_data_raw[0]) > 1 else '0'
+    
+    cemli_cp = safe_get(data, 'CEMLI_CONCURRENT_PROGRAMS', [])
+    
+    # Generate sizing analytics
+    opp_data = safe_get(data, 'OPP_SIZING', [])
+    forms_sessions_data = safe_get(data, 'FORMS_SESSIONS', [])
+    sizing_analytics = generate_sizing_analytics(db_params, active_users, opp_data, forms_sessions_data)
     
     # Calculate Complexity
     complexity_payload = calculate_complexity_score(data, db_params, active_users, custom_objs, custom_schemas, db_size, os_info, ebs_version, profiles)
