@@ -185,11 +185,41 @@ The `GRANT SELECT ANY TABLE TO EBS_ANALYZER;` is a very broad permission. For pr
 
 The filename contains a typo: `requirenebts` should be `requirements`.
 
-### GitHub Actions: Deprecated Actions
+### ~~GitHub Actions: Deprecated Actions~~ (FIXED ✅)
 
 **File:** `.github/workflows/ebs_analyzer_pipeline.yml`  
 
-Consider upgrading from `actions/upload-artifact@v3` and `actions/download-artifact@v3` to `v4`.
+Updated all GitHub Actions to latest versions:
+- `actions/checkout@v3` → `actions/checkout@v4`
+- `actions/upload-artifact@v3` → `actions/upload-artifact@v4`
+- `actions/download-artifact@v3` → `actions/download-artifact@v4`
+- `actions/setup-python@v4` → `actions/setup-python@v5`
+
+---
+
+## Additional Fixes (March 2026 Review)
+
+### Python: Added Type-Safe Helper Functions (FIXED ✅)
+
+**File:** `generate_upgrade_report.py`
+
+Added `safe_float()` and `safe_int()` helper functions to handle varying data formats:
+- Handles pure numeric strings: `"42"`
+- Extracts numbers from labeled data: `"INVALID_OBJECTS_COUNT|42"` → `42`
+- Handles missing or null values gracefully
+
+### Python: Removed Duplicate Code (FIXED ✅)
+
+**File:** `generate_upgrade_report.py`
+
+Replaced inline numeric extraction logic with calls to `safe_float()` helper function.
+
+### Repository Cleanup (DONE ✅)
+
+Removed duplicate files from main branch merge:
+- `pyhtml.py` (duplicate of `generate_upgrade_report.py`)
+- `test_1.sh` (duplicate of `ebs_upgrade_analyzer_collector.sh`)
+- `codereviewtest.md` (duplicate of `CODE_REVIEW.md`)
 
 ---
 

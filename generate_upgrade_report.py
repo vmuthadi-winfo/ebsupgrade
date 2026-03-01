@@ -24,6 +24,38 @@ def safe_get(data, section, default_row=None):
     val = data.get(section, [])
     return val if val else default_row
 
+def safe_float(value, default=0.0):
+    """Safely convert a value to float, extracting digits if needed"""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        # Extract numeric portion from string like "DB_SIZE|12500"
+        digits = ''.join(c for c in str(value) if c.isdigit() or c == '.')
+        if digits:
+            try:
+                return float(digits)
+            except (ValueError, TypeError):
+                pass
+        return default
+
+def safe_int(value, default=0):
+    """Safely convert a value to int, extracting digits if needed"""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        # Extract numeric portion
+        digits = ''.join(c for c in str(value) if c.isdigit())
+        if digits:
+            try:
+                return int(digits)
+            except (ValueError, TypeError):
+                pass
+        return default
+
 def render_table(rows, headers):
     if not rows:
         return "<p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>"
@@ -96,10 +128,26 @@ def run_prebuilt_rules(data, db_version, ebs_version, db_params, os_info, db_siz
          challenges.append("<b>UTL_FILE_DIR Desupported</b>: Oracle Database 19c totally desupports this initialization parameter. All custom PL/SQL utilizing this must be refactored to use standard Database Directory objects managed by the APPS schema (via `txkCreateDirObject.sql`).")
 
     # DB Links and Invalid Objects
-    db_links = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
-    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
-    if int(invalid_objs) > 100:
-        challenges.append(f"<b>Database Hygiene</b>: The source database has {invalid_objs} invalid objects. The 12.2 Edition-based Redefinition pre-reqs demand a clean compilation state before enablement.")
+    db_links = 0
+    for row in safe_get(data, 'DBA_DB_LINKS', []):
+        if row and row[0]:
+            try:
+                db_links += int(row[0])
+            except (ValueError, TypeError):
+                pass
+                
+    invalid_objs_raw = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0]
+    # Use safe_int which handles formats like "42" or "INVALID_OBJECTS_COUNT" (extracts digits)
+    invalid_objs_num = 0
+    for val in invalid_objs_raw:
+        num = safe_int(val, 0)
+        if num > 0:
+            invalid_objs_num = num
+            break
+    
+    if invalid_objs_num > 100:
+        challenges.append(f"<b>Database Hygiene</b>: The source database has {invalid_objs_num} invalid objects. The 12.2 Edition-based Redefinition pre-reqs demand a clean compilation state before enablement.")
+        
     if db_links > 15:
         challenges.append(f"<b>Integration Sprawl</b>: Detected {db_links} active Database Links. High integration coupling will drastically extend testing cycles during the Multitenant database platform migration.")
 
@@ -110,9 +158,10 @@ def run_prebuilt_rules(data, db_version, ebs_version, db_params, os_info, db_siz
     # Character Set
     challenges.append("<b>AL32UTF8 Mandate</b>: If the Database is not already AL32UTF8, the EBS 12.2 upgrade highly recommends transitioning to Unicode to support modern middle-tier functionality.")
 
-    # Memory Size
-    if float(db_size) > 2000:
-        challenges.append(f"<b>Downtime Constraints</b>: The database is quite large ({db_size} GB). Depending on OS-endianness, the migration/upgrade of the Database file structures might breach typical weekend downtime cutovers without utilizing specialized Data Guard or Oracle GoldenGate syncs.")
+    # Memory Size - use safe_float helper
+    db_size_num = safe_float(db_size)
+    if db_size_num > 2000:
+        challenges.append(f"<b>Downtime Constraints</b>: The database is quite large ({db_size_num} GB). Depending on OS-endianness, the migration/upgrade of the Database file structures might breach typical weekend downtime cutovers without utilizing specialized Data Guard or Oracle GoldenGate syncs.")
 
     return challenges
 
@@ -169,12 +218,12 @@ def calculate_complexity_score(data, db_params, active_users, custom_objs, custo
     db_version_info = safe_get(data, 'DB_VERSION', [['Unknown', '12', 'Unknown', 'Unknown']])[0]
     db_ver = db_version_info[1] if len(db_version_info) > 1 else '12'
     if '11' in db_ver or '12' in db_ver: cd2_score = 3
-    if float(db_size) > 1000: cd2_score += 2
+    if safe_float(db_size) > 1000: cd2_score += 2
     if cd2_score > 5: cd2_score = 5
 
     # CD-3: EBR Readiness
     cd3_score = 0
-    adzd_schemas = int(safe_get(data, 'ADOP_AD_ZD_SCHEMAS', [['0']])[0][0])
+    adzd_schemas = safe_int(safe_get(data, 'ADOP_AD_ZD_SCHEMAS', [['0']])[0][0])
     if custom_schemas_cnt > 10 and adzd_schemas == 0: cd3_score = 5
     elif custom_schemas_cnt > 0: cd3_score = 3
 
@@ -203,9 +252,7 @@ def calculate_complexity_score(data, db_params, active_users, custom_objs, custo
 
     # CD-7: Functional Blast Radius
     cd7_score = 0
-    users = 0
-    try: users = int(active_users)
-    except: pass
+    users = safe_int(active_users)
     if users > 1500: cd7_score = 5
     elif users > 400: cd7_score = 3
 
@@ -258,19 +305,16 @@ def calculate_effort_estimation(complexity_payload, custom_objs, db_size, active
         effort['cemli'] = int(effort['cemli'] * 1.2)
         
     # Adjust DB based on size
-    db_size_gb = float(db_size) if db_size else 0
+    db_size_gb = safe_float(db_size)
     if db_size_gb > 3000:
         effort['db'] = int(effort['db'] * 1.5)
     elif db_size_gb > 1500:
         effort['db'] = int(effort['db'] * 1.2)
         
     # Adjust testing based on users
-    try:
-        users = int(active_users)
-        if users > 2000:
-            effort['testing'] = int(effort['testing'] * 1.3)
-    except (ValueError, TypeError):
-        pass
+    users = safe_int(active_users)
+    if users > 2000:
+        effort['testing'] = int(effort['testing'] * 1.3)
     
     total_weeks = sum(effort.values())
     
@@ -308,14 +352,12 @@ def generate_risk_register(data, complexity_payload, os_info, db_version, custom
         risks.append({'id': 'R07', 'category': 'Integration', 'risk': 'External database dependencies identified', 'severity': 'Medium', 'impact': 'Medium', 'mitigation': 'Validate connectivity post-upgrade'})
     
     # Invalid Objects
-    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
-    try:
-        if int(invalid_objs) > 500:
-            risks.append({'id': 'R08', 'category': 'Database', 'risk': f'{invalid_objs} invalid objects require remediation', 'severity': 'High', 'impact': 'Medium', 'mitigation': 'Run utlrp.sql and resolve compilation errors'})
-        elif int(invalid_objs) > 100:
-            risks.append({'id': 'R09', 'category': 'Database', 'risk': f'{invalid_objs} invalid objects detected', 'severity': 'Medium', 'impact': 'Low', 'mitigation': 'Review and compile before upgrade'})
-    except (ValueError, TypeError):
-        pass
+    invalid_objs_raw = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
+    invalid_objs_count = safe_int(invalid_objs_raw)
+    if invalid_objs_count > 500:
+        risks.append({'id': 'R08', 'category': 'Database', 'risk': f'{invalid_objs_count} invalid objects require remediation', 'severity': 'High', 'impact': 'Medium', 'mitigation': 'Run utlrp.sql and resolve compilation errors'})
+    elif invalid_objs_count > 100:
+        risks.append({'id': 'R09', 'category': 'Database', 'risk': f'{invalid_objs_count} invalid objects detected', 'severity': 'Medium', 'impact': 'Low', 'mitigation': 'Review and compile before upgrade'})
     
     # Complexity-based risks
     if complexity_payload['total'] >= 25:
@@ -341,38 +383,29 @@ def generate_sizing_analytics(db_params, active_users, opp_data, forms_data):
             break
             
     # Calculate recommended Weblogic OAF Managed Servers (assume 1 server per 200 users, min 2)
-    try:
-        users = int(active_users)
-    except:
-        users = 500
+    users = safe_int(active_users, 500)
     wls_servers = max(users // 200, 2)
     if users < 100: wls_servers = 1
     
     # Calculate Custom Forms 
-    try:
-        forms_sessions = int(forms_data[0][0])
-    except:
-        forms_sessions = 50
+    forms_sessions = safe_int(forms_data[0][0] if forms_data else '50', 50)
     forms_servers = max(forms_sessions // 150, 1)
 
     # Calculate OPP
-    try:
-        opp_target = int(opp_data[0][0])
-    except:
-        opp_target = 1
+    opp_target = safe_int(opp_data[0][0] if opp_data else '1', 1)
     opp_memory = max(opp_target * 2, 2) # 2 GB per OPP JVM usually
     
     # Database Memory
     db_mem = 16 # Default GB
     for row in db_params:
-        if 'sga' in row[0].lower() and row[1].isdigit():
-            # If size in bytes, convert to GB
-            val = int(row[1])
-            if val > 1024*1024*1024:
-                db_mem = val // (1024*1024*1024)
-            else:
-                db_mem = val // 1024 # if in MB
-            break
+        if row and len(row) >= 2 and 'sga' in row[0].lower():
+            val = safe_int(row[1])
+            if val > 0:
+                if val > 1024*1024*1024:
+                    db_mem = val // (1024*1024*1024)
+                else:
+                    db_mem = val // 1024 # if in MB
+                break
 
     recom_mem = max(int(db_mem * 1.2), 16)
     min_cores = max(cpu_count, 4)
