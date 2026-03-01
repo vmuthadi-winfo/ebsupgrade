@@ -12,102 +12,107 @@ DATE_STAMP=$(date +"%Y%m%d_%H%M%S")
 OUTPUT_FILE="ebs_upgrade_analyzer_data_${HOST_NAME}_${DATE_STAMP}.txt"
 LOG_FILE="ebs_upgrade_analyzer_${HOST_NAME}_${DATE_STAMP}.log"
 
-echo "=========================================================" | tee -a $LOG_FILE
-echo " EBS & Database Upgrade Deep-Dive Analyzer " | tee -a $LOG_FILE
-echo "=========================================================" | tee -a $LOG_FILE
+echo "=========================================================" | tee -a "$LOG_FILE"
+echo " EBS & Database Upgrade Deep-Dive Analyzer " | tee -a "$LOG_FILE"
+echo "=========================================================" | tee -a "$LOG_FILE"
 
 # Support Non-Interactive CI/CD pipeline runs
 if [ -z "$DB_USER" ] || [ -z "$DB_PASS" ] || [ -z "$DB_TNS" ]; then
     echo "Interactive Shell Mode"
     echo -n "Enter the Analyzer Database Username [e.g. EBS_ANALYZER]: "
-    read DB_USER
+    read -r DB_USER
     echo -n "Enter the Analyzer Database Password: "
-    read -s DB_PASS
+    read -rs DB_PASS
     echo
     echo -n "Enter the TNS Connection String [e.g. PRODDB or localhost:1521/PRODDB]: "
-    read DB_TNS
+    read -r DB_TNS
 else
     echo "Pipeline Mode: Credentials detected via environment variables."
 fi
 
-echo "Starting collection at: $(date)" | tee -a $LOG_FILE
-echo "Output will be written to: $OUTPUT_FILE" | tee -a $LOG_FILE
+echo "Starting collection at: $(date)" | tee -a "$LOG_FILE"
+echo "Output will be written to: $OUTPUT_FILE" | tee -a "$LOG_FILE"
 
-> $OUTPUT_FILE
+: > "$OUTPUT_FILE"
 
-echo "1. Collecting OS, Hardware & Storage Info" | tee -a $LOG_FILE
-echo "[SECTION_START:OS_SERVER_INFO]" >> $OUTPUT_FILE
-echo "HOSTNAME|$(hostname)" >> $OUTPUT_FILE
-echo "OS_RELEASE|$(cat /etc/system-release 2>/dev/null || cat /etc/redhat-release 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')" >> $OUTPUT_FILE
-echo "KERNEL|$(uname -r)" >> $OUTPUT_FILE
-echo "TOTAL_CPU_CORES|$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo)" >> $OUTPUT_FILE
-echo "TOTAL_MEMORY_GB|$(free -g | awk '/^Mem:/{print $2}')" >> $OUTPUT_FILE
-echo "[SECTION_END:OS_SERVER_INFO]" >> $OUTPUT_FILE
+echo "1. Collecting OS, Hardware & Storage Info" | tee -a "$LOG_FILE"
+{
+echo "[SECTION_START:OS_SERVER_INFO]"
+echo "HOSTNAME|$(hostname)"
+echo "OS_RELEASE|$(cat /etc/system-release 2>/dev/null || cat /etc/redhat-release 2>/dev/null || grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"')"
+echo "KERNEL|$(uname -r)"
+echo "TOTAL_CPU_CORES|$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo)"
+echo "TOTAL_MEMORY_GB|$(free -g | awk '/^Mem:/{print $2}')"
+echo "[SECTION_END:OS_SERVER_INFO]"
 
-echo "[SECTION_START:OS_STORAGE_MOUNTS]" >> $OUTPUT_FILE
-df -hP | awk 'NR>1 {print $1"|"$2"|"$3"|"$4"|"$5"|"$6}' >> $OUTPUT_FILE
-echo "[SECTION_END:OS_STORAGE_MOUNTS]" >> $OUTPUT_FILE
+echo "[SECTION_START:OS_STORAGE_MOUNTS]"
+df -hP | awk 'NR>1 {print $1"|"$2"|"$3"|"$4"|"$5"|"$6}'
+echo "[SECTION_END:OS_STORAGE_MOUNTS]"
 
-echo "[SECTION_START:OS_ULIMIT]" >> $OUTPUT_FILE
-echo "OPEN_FILES|$(ulimit -n)" >> $OUTPUT_FILE
-echo "MAX_USER_PROCESSES|$(ulimit -u)" >> $OUTPUT_FILE
-echo "[SECTION_END:OS_ULIMIT]" >> $OUTPUT_FILE
+echo "[SECTION_START:OS_ULIMIT]"
+echo "OPEN_FILES|$(ulimit -n)"
+echo "MAX_USER_PROCESSES|$(ulimit -u)"
+echo "[SECTION_END:OS_ULIMIT]"
+} >> "$OUTPUT_FILE"
 
-echo "2. Check Application Tier Context (if sourced)" | tee -a $LOG_FILE
+echo "2. Check Application Tier Context (if sourced)" | tee -a "$LOG_FILE"
 
 # Dynamic Context Discovery
 if [ -z "$CONTEXT_FILE" ] || [ ! -f "$CONTEXT_FILE" ]; then
     P_CONTEXT=$(ps -eo args 2>/dev/null | grep -i 'context_file=' | grep -v 'grep' | grep '.xml' | awk -F'context_file=' '{print $2}' | awk '{print $1}' | head -1)
     if [ -n "$P_CONTEXT" ] && [ -f "$P_CONTEXT" ]; then
         CONTEXT_FILE=$P_CONTEXT
-        echo "Auto-Discovered Context File: $CONTEXT_FILE" | tee -a $LOG_FILE
+        echo "Auto-Discovered Context File: $CONTEXT_FILE" | tee -a "$LOG_FILE"
     fi
 fi
 
-echo "[SECTION_START:APP_CONTEXT_INFO]" >> $OUTPUT_FILE
+{
+echo "[SECTION_START:APP_CONTEXT_INFO]"
 if [ -n "$CONTEXT_FILE" ] && [ -f "$CONTEXT_FILE" ]; then
-    echo "CONTEXT_FILE_FOUND|YES" >> $OUTPUT_FILE
-    echo "CONTEXT_FILE_PATH|$CONTEXT_FILE" >> $OUTPUT_FILE
-    echo "WEB_ENTRY_HOST|$(cat $CONTEXT_FILE | grep -i 's_webentryhost' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "WEB_ENTRY_DOMAIN|$(cat $CONTEXT_FILE | grep -i 's_webentrydomain' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "ACTIVE_WEB_PORT|$(cat $CONTEXT_FILE | grep -i 's_active_webport' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "ADMIN_SERVER|$(cat $CONTEXT_FILE | grep -i 's_adminserver' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "FORMS_SERVER|$(cat $CONTEXT_FILE | grep -i 's_forms_server' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "CP_SERVER|$(cat $CONTEXT_FILE | grep -i 's_cpServer' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "SHARED_APPL_TOP|$(cat $CONTEXT_FILE | grep -i 's_shared_file_system' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "ORACLE_HOME|$ORACLE_HOME" >> $OUTPUT_FILE
+    echo "CONTEXT_FILE_FOUND|YES"
+    echo "CONTEXT_FILE_PATH|$CONTEXT_FILE"
+    echo "WEB_ENTRY_HOST|$(grep -i 's_webentryhost' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "WEB_ENTRY_DOMAIN|$(grep -i 's_webentrydomain' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "ACTIVE_WEB_PORT|$(grep -i 's_active_webport' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "ADMIN_SERVER|$(grep -i 's_adminservername' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "FORMS_SERVER|$(grep -i 's_formsservername' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "CP_SERVER|$(grep -i 's_cp_servername' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "SHARED_APPL_TOP|$(grep -i 's_shared_file_system' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "APPS_BASE|$(grep -i 's_apps_base' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "ORACLE_HOME|$ORACLE_HOME"
 else
-    echo "CONTEXT_FILE_FOUND|NO" >> $OUTPUT_FILE
+    echo "CONTEXT_FILE_FOUND|NO"
 fi
-echo "[SECTION_END:APP_CONTEXT_INFO]" >> $OUTPUT_FILE
+echo "[SECTION_END:APP_CONTEXT_INFO]"
 
-echo "[SECTION_START:APP_TECHSTACK_INFO]" >> $OUTPUT_FILE
+echo "[SECTION_START:APP_TECHSTACK_INFO]"
 if [ -n "$CONTEXT_FILE" ] && [ -f "$CONTEXT_FILE" ]; then
-    echo "ATG_VERSION|$(cat $CONTEXT_FILE | grep -i 's_atg_version' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "TOOLS_VERSION|$(cat $CONTEXT_FILE | grep -i 's_tools_version' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "OHS_VERSION|$(cat $CONTEXT_FILE | grep -i 's_ohs_version' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "JDK_TARGET|$(cat $CONTEXT_FILE | grep -i 's_jdktarget' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "CUSTOM_FILE_TOP|$(cat $CONTEXT_FILE | grep -i 's_custom_file_top' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "ADKEYSTORE|$(cat $CONTEXT_FILE | grep -i 's_adkeystore' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "TRUSTSTORE|$(cat $CONTEXT_FILE | grep -i 's_truststore' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
-    echo "WEB_SSL_DIR|$(cat $CONTEXT_FILE | grep -i 's_web_ssl_directory' | cut -d'>' -f2 | cut -d'<' -f1)" >> $OUTPUT_FILE
+    echo "ATG_PF_VERSION|$(grep -i 's_atg_pf_version' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "TOOLS_VERSION|$(grep -i 's_tools_oh_version' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "FMW_HOME|$(grep -i 's_fmw_home' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "JDK_TOP|$(grep -i 's_jdk_top' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "NE_BASE|$(grep -i 's_ne_base' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "FILE_EDITION|$(grep -i 's_file_edition_name' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "WEB_SSL_DIR|$(grep -i 's_web_ssl_directory' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
+    echo "WEBLOGIC_HOME|$(grep -i 's_wls_home' "$CONTEXT_FILE" | cut -d'>' -f2 | cut -d'<' -f1 | head -1)"
 fi
-echo "[SECTION_END:APP_TECHSTACK_INFO]" >> $OUTPUT_FILE
+echo "[SECTION_END:APP_TECHSTACK_INFO]"
 
-echo "[SECTION_START:APP_CUSTOM_FILES]" >> $OUTPUT_FILE
+echo "[SECTION_START:APP_CUSTOM_FILES]"
 if [ -n "$OA_HTML" ] && [ -d "$OA_HTML" ]; then
-    echo "ROGUE_OA_HTML_B64|$(find $OA_HTML -iname '*b64*' 2>/dev/null | wc -l)" >> $OUTPUT_FILE
-    echo "ROGUE_OA_HTML_XX_FILES|$(find $OA_HTML -iname 'xx*' -o -iname 'XX*' 2>/dev/null | wc -l)" >> $OUTPUT_FILE
+    echo "ROGUE_OA_HTML_B64|$(find "$OA_HTML" -iname '*b64*' 2>/dev/null | wc -l)"
+    echo "ROGUE_OA_HTML_XX_FILES|$(find "$OA_HTML" \( -iname 'xx*' -o -iname 'XX*' \) 2>/dev/null | wc -l)"
 fi
 if [ -n "$OA_MEDIA" ] && [ -d "$OA_MEDIA" ]; then
-    echo "ROGUE_OA_MEDIA_XX_IMAGES|$(find $OA_MEDIA -iname 'xx*' -o -iname 'XX*' 2>/dev/null | wc -l)" >> $OUTPUT_FILE
+    echo "ROGUE_OA_MEDIA_XX_IMAGES|$(find "$OA_MEDIA" \( -iname 'xx*' -o -iname 'XX*' \) 2>/dev/null | wc -l)"
 fi
 if [ -n "$JAVA_TOP" ] && [ -d "$JAVA_TOP" ]; then
-    echo "ROGUE_JAVA_TOP_XX_CLASSES|$(find $JAVA_TOP -iname 'xx*.class' -o -iname 'XX*.class' 2>/dev/null | wc -l)" >> $OUTPUT_FILE
+    echo "ROGUE_JAVA_TOP_XX_CLASSES|$(find "$JAVA_TOP" \( -iname 'xx*.class' -o -iname 'XX*.class' \) 2>/dev/null | wc -l)"
 fi
-echo "[SECTION_END:APP_CUSTOM_FILES]" >> $OUTPUT_FILE
+echo "[SECTION_END:APP_CUSTOM_FILES]"
+} >> "$OUTPUT_FILE"
 
-echo "3. Creating SQL Payload for Deep-Dive Extraction" | tee -a $LOG_FILE
+echo "3. Creating SQL Payload for Deep-Dive Extraction" | tee -a "$LOG_FILE"
 
 cat << 'EOF' > run_db_collect.sql
 set term off
@@ -157,7 +162,23 @@ AND (
     fo.profile_option_name LIKE '%ENDECA%' OR
     fo.profile_option_name LIKE '%SOA%' OR
     fo.profile_option_name LIKE '%OBIEE%' OR
-    fo.profile_option_name IN ('APPS_FRAMEWORK_AGENT', 'APPS_AUTH_AGENT', 'ICX_FORMS_LAUNCHER', 'ICX_SESSION_TIMEOUT')
+    fo.profile_option_name LIKE '%REST%' OR
+    fo.profile_option_name IN (
+        'APPS_FRAMEWORK_AGENT',
+        'APPS_AUTH_AGENT',
+        'APPS_SERVLET_AGENT', 
+        'ICX_FORMS_LAUNCHER',
+        'ICX_SESSION_TIMEOUT',
+        'FND_SSO_COOKIE_DOMAIN',
+        'APPS_SSO_COOKIE_DOMAIN',
+        'APPS_SSO_PROFILE',
+        'FND_DIAGNOSTICS',
+        'GUEST_USER_PWD',
+        'APPLICATIONS_HOME_PAGE',
+        'ICX_DISCOVERER_LAUNCHER',
+        'ICX_DISCOVERER_VIEWER_LAUNCHER',
+        'FND_WEB_SERVER'
+    )
 );
 prompt [SECTION_END:EBS_INTEGRATIONS_PROFILES]
 
@@ -253,29 +274,150 @@ group by fee.execution_method_code;
 prompt [SECTION_END:CEMLI_CONCURRENT_PROGRAMS]
 
 prompt [SECTION_START:CEMLI_FORMS_AND_PAGES]
-select 'CUSTOM_FORMS' ||'|'|| count(*) from apps.fnd_form where form_name like 'XX%';
+select 'CUSTOM_FORMS' ||'|'|| count(*) from apps.fnd_form where form_name like 'XX%' or form_name like 'CUST%';
 prompt [SECTION_END:CEMLI_FORMS_AND_PAGES]
 
 prompt [SECTION_START:CEMLI_OAF_PERSONALIZATIONS]
-select 'OAF_PERSONALIZATIONS' ||'|'|| count(*) from apps.jdr_paths where path_docid is not null and path_name like '%custom%';
+select 'OAF_PERSONALIZATIONS' ||'|'|| count(*) from apps.jdr_paths where path_type = 'DOCUMENT' and (path_name like '/oracle/apps/%/customizations/%' or path_name like '%/XX%');
 prompt [SECTION_END:CEMLI_OAF_PERSONALIZATIONS]
 
 prompt [SECTION_START:CEMLI_ALERTS]
-select 'CUSTOM_ALERTS' ||'|'|| count(*) from apps.alr_alerts where alert_name like 'XX%';
+select 'CUSTOM_ALERTS' ||'|'|| count(*) from apps.alr_alerts where alert_name like 'XX%' or alert_name like 'CUST%';
 prompt [SECTION_END:CEMLI_ALERTS]
+
+prompt [SECTION_START:CEMLI_AME_RULES]
+select 'AME_CUSTOM_RULES' ||'|'|| count(*) from apps.ame_rules where rule_key like 'XX%' or created_by > 1;
+prompt [SECTION_END:CEMLI_AME_RULES]
+
+-- Enhanced Data Collection for Upgrade Analysis
+
+prompt [SECTION_START:AD_TXK_VERSIONS]
+select 'AD' ||'|'|| (select coalesce(patch_level,'UNKNOWN') from apps.fnd_product_installations where application_id = 0)
+from dual;
+select 'TXK' ||'|'|| (select coalesce(patch_level,'UNKNOWN') from apps.fnd_product_installations where application_id = 535)
+from dual;
+select 'FND' ||'|'|| (select coalesce(patch_level,'UNKNOWN') from apps.fnd_product_installations where application_id = 0)
+from dual;
+prompt [SECTION_END:AD_TXK_VERSIONS]
+
+prompt [SECTION_START:DB_CHARACTER_SET]
+select parameter ||'|'|| value from nls_database_parameters where parameter in ('NLS_CHARACTERSET','NLS_NCHAR_CHARACTERSET','NLS_LANGUAGE','NLS_TERRITORY','NLS_DATE_FORMAT');
+prompt [SECTION_END:DB_CHARACTER_SET]
+
+prompt [SECTION_START:DB_TABLESPACES]
+select tablespace_name ||'|'|| round(sum(bytes)/1024/1024/1024,2) ||'|'|| status
+from dba_data_files group by tablespace_name, status order by 2 desc;
+prompt [SECTION_END:DB_TABLESPACES]
+
+prompt [SECTION_START:DB_REDO_LOGS]
+select group# ||'|'|| members ||'|'|| round(bytes/1024/1024,0) ||'|'|| status from v$log;
+prompt [SECTION_END:DB_REDO_LOGS]
+
+prompt [SECTION_START:DB_ARCHIVE_MODE]
+select log_mode ||'|'|| force_logging ||'|'|| supplemental_log_data_min from v$database;
+prompt [SECTION_END:DB_ARCHIVE_MODE]
+
+prompt [SECTION_START:DB_FEATURES_USED]
+select * from (select name ||'|'|| detected_usages ||'|'|| currently_used from dba_feature_usage_statistics where detected_usages > 0 order by detected_usages desc) where rownum <= 30;
+prompt [SECTION_END:DB_FEATURES_USED]
+
+prompt [SECTION_START:INVALID_OBJECTS_DETAIL]
+select owner ||'|'|| object_type ||'|'|| count(*) from dba_objects where status = 'INVALID' and owner not in ('SYS','SYSTEM','WMSYS','XDB','CTXSYS','MDSYS','OLAPSYS','ORDDATA','ORDSYS') group by owner, object_type order by 3 desc;
+prompt [SECTION_END:INVALID_OBJECTS_DETAIL]
+
+prompt [SECTION_START:AD_REGISTERED_SCHEMAS]
+select oracle_username ||'|'|| read_only_flag from apps.ad_oracle_schemas order by oracle_username;
+prompt [SECTION_END:AD_REGISTERED_SCHEMAS]
+
+prompt [SECTION_START:ONLINE_PATCHING_STATUS]
+select fs_clone_status ||'|'|| adop_valid from apps.fnd_appl_tops where rownum = 1;
+prompt [SECTION_END:ONLINE_PATCHING_STATUS]
+
+prompt [SECTION_START:AD_APPLIED_PATCHES_RECENT]
+select patch_name ||'|'|| patch_type ||'|'|| to_char(creation_date,'YYYY-MM-DD') from apps.ad_applied_patches where creation_date >= sysdate - 180 order by creation_date desc;
+prompt [SECTION_END:AD_APPLIED_PATCHES_RECENT]
+
+prompt [SECTION_START:EBS_RESPONSIBILITIES]
+select count(*) ||'|'|| decode(end_date, null, 'ACTIVE', 'INACTIVE') from apps.fnd_responsibility where responsibility_key like 'XX%' or responsibility_key like 'CUST%' group by decode(end_date, null, 'ACTIVE', 'INACTIVE');
+prompt [SECTION_END:EBS_RESPONSIBILITIES]
+
+prompt [SECTION_START:CUSTOM_MENUS]
+select 'CUSTOM_MENUS' ||'|'|| count(*) from apps.fnd_menus where menu_name like 'XX%' or menu_name like 'CUST%';
+prompt [SECTION_END:CUSTOM_MENUS]
+
+prompt [SECTION_START:CUSTOM_FUNCTIONS]
+select 'CUSTOM_FUNCTIONS' ||'|'|| count(*) from apps.fnd_form_functions where function_name like 'XX%' or function_name like 'CUST%';
+prompt [SECTION_END:CUSTOM_FUNCTIONS]
+
+prompt [SECTION_START:CUSTOM_LOOKUPS]
+select 'CUSTOM_LOOKUPS' ||'|'|| count(distinct lookup_type) from apps.fnd_lookup_values where lookup_type like 'XX%' or lookup_type like 'CUST%';
+prompt [SECTION_END:CUSTOM_LOOKUPS]
+
+prompt [SECTION_START:CUSTOM_VALUE_SETS]
+select 'CUSTOM_VALUE_SETS' ||'|'|| count(*) from apps.fnd_flex_value_sets where flex_value_set_name like 'XX%' or flex_value_set_name like 'CUST%';
+prompt [SECTION_END:CUSTOM_VALUE_SETS]
+
+prompt [SECTION_START:CUSTOM_DFF]
+select 'DESCRIPTIVE_FLEXFIELDS' ||'|'|| count(*) from apps.fnd_descriptive_flexs_vl where descriptive_flexfield_name like 'XX%' or title like '%Custom%';
+prompt [SECTION_END:CUSTOM_DFF]
+
+prompt [SECTION_START:SCHEDULER_JOBS]
+select owner ||'|'|| job_name ||'|'|| state from dba_scheduler_jobs where owner not in ('SYS','SYSTEM','EXFSYS') and rownum <= 50 order by owner;
+prompt [SECTION_END:SCHEDULER_JOBS]
+
+prompt [SECTION_START:DB_LINKS_DETAIL]
+select owner ||'|'|| db_link ||'|'|| host from dba_db_links order by owner, db_link;
+prompt [SECTION_END:DB_LINKS_DETAIL]
+
+prompt [SECTION_START:LOB_SIZES]
+select owner ||'|'|| table_name ||'|'|| column_name ||'|'|| segment_name from dba_lobs where owner in ('APPS','APPLSYS') and rownum <= 20;
+prompt [SECTION_END:LOB_SIZES]
+
+prompt [SECTION_START:MATERIALIZED_VIEWS]
+select owner ||'|'|| mview_name ||'|'|| refresh_mode ||'|'|| last_refresh_date from dba_mviews where owner not in ('SYS','SYSTEM') and rownum <= 30;
+prompt [SECTION_END:MATERIALIZED_VIEWS]
+
+prompt [SECTION_START:PARTITIONED_TABLES]
+select owner ||'|'|| table_name ||'|'|| partitioning_type ||'|'|| partition_count from dba_part_tables where owner in ('APPS','AP','AR','GL','PO','INV','HR','PA') and rownum <= 30;
+prompt [SECTION_END:PARTITIONED_TABLES]
+
+prompt [SECTION_START:EBS_TIMEZONES]
+select timezone_code ||'|'|| enabled_flag from apps.fnd_timezones_b where enabled_flag = 'Y';
+prompt [SECTION_END:EBS_TIMEZONES]
+
+prompt [SECTION_START:EBS_TERRITORIES]
+select territory_code ||'|'|| count(*) as orgs from apps.hr_all_organization_units group by territory_code having count(*) > 0 order by 2 desc;
+prompt [SECTION_END:EBS_TERRITORIES]
+
+prompt [SECTION_START:CONCURRENT_REQUESTS_STATS]
+select status_code ||'|'|| phase_code ||'|'|| count(*) from apps.fnd_concurrent_requests where requested_start_date > sysdate - 30 group by status_code, phase_code;
+prompt [SECTION_END:CONCURRENT_REQUESTS_STATS]
+
+prompt [SECTION_START:ATTACHMENTS_COUNT]
+select 'ATTACHMENTS' ||'|'|| count(*) from apps.fnd_attached_documents;
+prompt [SECTION_END:ATTACHMENTS_COUNT]
+
+prompt [SECTION_START:AUDIT_TABLES]
+select 'AUDIT_TABLES' ||'|'|| count(*) from dba_tables where table_name like '%_A' and owner = 'APPS';
+prompt [SECTION_END:AUDIT_TABLES]
 
 
 exit;
 EOF
 
-echo "4. Executing Database Deep-Dive via user: $DB_USER" | tee -a $LOG_FILE
-if sqlplus -s "$DB_USER/$DB_PASS@$DB_TNS" @run_db_collect.sql >> $OUTPUT_FILE 2>>$LOG_FILE; then
-    echo "DB Collection Successful." | tee -a $LOG_FILE
+echo "4. Executing Database Deep-Dive via user: $DB_USER" | tee -a "$LOG_FILE"
+# Using sqlplus with /nolog to avoid password exposure in process listing
+if sqlplus -s /nolog >> "$OUTPUT_FILE" 2>>"$LOG_FILE" << EOSQL
+CONNECT $DB_USER/$DB_PASS@$DB_TNS
+@run_db_collect.sql
+EOSQL
+then
+    echo "DB Collection Successful." | tee -a "$LOG_FILE"
 else
-    echo "ERROR: Failed connecting using $DB_USER. Are privileges correct?" | tee -a $LOG_FILE
+    echo "ERROR: Failed connecting using $DB_USER. Are privileges correct?" | tee -a "$LOG_FILE"
 fi
 
-rm run_db_collect.sql
-sed -i '/^$/d' $OUTPUT_FILE
+rm -f run_db_collect.sql
+sed -i '/^$/d' "$OUTPUT_FILE"
 
-echo "Collection Complete. Output: $OUTPUT_FILE" | tee -a $LOG_FILE
+echo "Collection Complete. Output: $OUTPUT_FILE" | tee -a "$LOG_FILE"
