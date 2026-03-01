@@ -51,7 +51,7 @@ def determine_integrations(profiles):
     }
     
     fwk_agent = ""
-    servlet_agent = ""
+    auth_agent = ""
 
     for row in profiles:
         if len(row) < 2: continue
@@ -59,7 +59,7 @@ def determine_integrations(profiles):
         if not value.strip(): continue
 
         if name == 'APPS_FRAMEWORK_AGENT': fwk_agent = value
-        if name == 'APPS_SERVLET_AGENT': servlet_agent = value
+        if name == 'APPS_AUTH_AGENT': auth_agent = value
         
         if 'APEX' in name:
             integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}. Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
@@ -75,8 +75,8 @@ def determine_integrations(profiles):
             integ['SSO'] = {'status': 'Active', 'desc': 'SSO/OAM configurations detected.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 12.2.1.4+ on Weblogic 14c (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
             
     # Check if agents differ indicating external SSO
-    if servlet_agent and fwk_agent and servlet_agent != fwk_agent:
-         integ['SSO'] = {'status': 'Active', 'desc': 'Potential SSO / Access Gate detected via disjointed Servlet & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
+    if auth_agent and fwk_agent and auth_agent != fwk_agent:
+         integ['SSO'] = {'status': 'Active', 'desc': 'Potential SSO / Access Gate detected via disjointed Auth & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
 
     return integ
 
@@ -239,6 +239,100 @@ def calculate_complexity_score(data, db_params, active_users, custom_objs, custo
         }
     }
 
+def calculate_effort_estimation(complexity_payload, custom_objs, db_size, active_users):
+    """Calculate effort estimation by workstream based on complexity"""
+    base_effort = {
+        'Small': {'infra': 2, 'db': 3, 'app': 4, 'cemli': 2, 'sso': 1, 'integrations': 2, 'testing': 4, 'cutover': 1},
+        'Medium': {'infra': 4, 'db': 6, 'app': 8, 'cemli': 6, 'sso': 2, 'integrations': 4, 'testing': 8, 'cutover': 2},
+        'Large': {'infra': 6, 'db': 10, 'app': 12, 'cemli': 12, 'sso': 4, 'integrations': 8, 'testing': 16, 'cutover': 3},
+        'Very Large': {'infra': 10, 'db': 16, 'app': 20, 'cemli': 20, 'sso': 6, 'integrations': 12, 'testing': 24, 'cutover': 4}
+    }
+    
+    size = complexity_payload['size']
+    effort = base_effort.get(size, base_effort['Medium']).copy()
+    
+    # Adjust CEMLI based on actual counts
+    if custom_objs > 5000:
+        effort['cemli'] = int(effort['cemli'] * 1.5)
+    elif custom_objs > 2000:
+        effort['cemli'] = int(effort['cemli'] * 1.2)
+        
+    # Adjust DB based on size
+    db_size_gb = float(db_size) if db_size else 0
+    if db_size_gb > 3000:
+        effort['db'] = int(effort['db'] * 1.5)
+    elif db_size_gb > 1500:
+        effort['db'] = int(effort['db'] * 1.2)
+        
+    # Adjust testing based on users
+    try:
+        users = int(active_users)
+        if users > 2000:
+            effort['testing'] = int(effort['testing'] * 1.3)
+    except:
+        pass
+    
+    total_weeks = sum(effort.values())
+    
+    return {
+        'workstreams': effort,
+        'total_weeks': total_weeks,
+        'total_months': round(total_weeks / 4, 1)
+    }
+
+def generate_risk_register(data, complexity_payload, os_info, db_version, custom_objs, db_links_count):
+    """Generate a risk register based on extracted data"""
+    risks = []
+    
+    # OS Related Risks
+    os_name = os_info.get('OS_RELEASE', '').lower()
+    if 'linux' not in os_name:
+        risks.append({'id': 'R01', 'category': 'Infrastructure', 'risk': 'Cross-platform migration required', 'severity': 'Critical', 'impact': 'High', 'mitigation': 'Plan for Transportable Tablespaces or full export/import'})
+    elif '6' in os_name or '7' in os_name:
+        risks.append({'id': 'R02', 'category': 'Infrastructure', 'risk': 'End-of-Life OS version detected', 'severity': 'High', 'impact': 'Medium', 'mitigation': 'Include OS upgrade in project scope'})
+    
+    # Database Risks
+    if '11' in db_version or '12.1' in db_version:
+        risks.append({'id': 'R03', 'category': 'Database', 'risk': 'Major database version upgrade required', 'severity': 'High', 'impact': 'High', 'mitigation': 'Plan for 19c upgrade with CDB/PDB conversion'})
+    
+    # Customization Risks
+    if custom_objs > 5000:
+        risks.append({'id': 'R04', 'category': 'CEMLI', 'risk': 'Heavy customization footprint detected', 'severity': 'High', 'impact': 'High', 'mitigation': 'Allocate dedicated CEMLI remediation workstream'})
+    elif custom_objs > 1000:
+        risks.append({'id': 'R05', 'category': 'CEMLI', 'risk': 'Moderate customization requiring EBR enablement', 'severity': 'Medium', 'impact': 'Medium', 'mitigation': 'Review custom schemas for edition-based readiness'})
+    
+    # Integration Risks
+    if db_links_count > 20:
+        risks.append({'id': 'R06', 'category': 'Integration', 'risk': 'High number of database links indicates complex integrations', 'severity': 'High', 'impact': 'High', 'mitigation': 'Map all integration touchpoints and test thoroughly'})
+    elif db_links_count > 5:
+        risks.append({'id': 'R07', 'category': 'Integration', 'risk': 'External database dependencies identified', 'severity': 'Medium', 'impact': 'Medium', 'mitigation': 'Validate connectivity post-upgrade'})
+    
+    # Invalid Objects
+    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
+    try:
+        if int(invalid_objs) > 500:
+            risks.append({'id': 'R08', 'category': 'Database', 'risk': f'{invalid_objs} invalid objects require remediation', 'severity': 'High', 'impact': 'Medium', 'mitigation': 'Run utlrp.sql and resolve compilation errors'})
+        elif int(invalid_objs) > 100:
+            risks.append({'id': 'R09', 'category': 'Database', 'risk': f'{invalid_objs} invalid objects detected', 'severity': 'Medium', 'impact': 'Low', 'mitigation': 'Review and compile before upgrade'})
+    except:
+        pass
+    
+    # Complexity-based risks
+    if complexity_payload['total'] >= 25:
+        risks.append({'id': 'R10', 'category': 'Project', 'risk': 'Very Large complexity score indicates high project risk', 'severity': 'Critical', 'impact': 'High', 'mitigation': 'Consider phased approach with multiple mock cycles'})
+    elif complexity_payload['total'] >= 17:
+        risks.append({'id': 'R11', 'category': 'Project', 'risk': 'Large upgrade scope requires careful planning', 'severity': 'High', 'impact': 'Medium', 'mitigation': 'Plan minimum 3 rehearsal cycles'})
+    
+    # SSO Risk
+    if complexity_payload['factors'].get('CD-6 Security/SSO', 0) >= 3:
+        risks.append({'id': 'R12', 'category': 'Security', 'risk': 'SSO/OAM integration requires re-implementation', 'severity': 'High', 'impact': 'High', 'mitigation': 'Engage security team early; plan WebGate upgrades'})
+    
+    # Add default risk if none found
+    if not risks:
+        risks.append({'id': 'R00', 'category': 'General', 'risk': 'Standard upgrade considerations apply', 'severity': 'Low', 'impact': 'Low', 'mitigation': 'Follow Oracle best practices'})
+    
+    return risks
+
 def generate_sizing_analytics(db_params, active_users, opp_data, forms_data):
     cpu_count = 8 # Default minimum
     for row in db_params:
@@ -349,6 +443,14 @@ def build_html(data):
     # Calculate Complexity
     complexity_payload = calculate_complexity_score(data, db_params, active_users, custom_objs, custom_schemas, db_size, os_info, ebs_version, profiles)
     
+    # Calculate Effort Estimation
+    effort_estimation = calculate_effort_estimation(complexity_payload, custom_objs, db_size, active_users)
+    
+    # Generate Risk Register
+    risk_register = generate_risk_register(data, complexity_payload, os_info, 
+                                           db_version_info[1] if len(db_version_info)>1 else '', 
+                                           custom_objs, db_links)
+    
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -433,13 +535,16 @@ def build_html(data):
         <a href="#executive">1. Executive Summary</a>
         <a href="#issues">2. Issues & Challenges</a>
         <a href="#roadmap">3. Upgrade Roadmap</a>
-        <a href="#cemli">4. CEMLI / Customization Impact</a>
-        <a href="#topology">5. System Topology</a>
-        <a href="#integrations">6. Enterprise Integrations</a>
-        <a href="#workload">7. Database Workloads</a>
-        <a href="#sizing">8. Target Sizing & Capacity</a>
-        <a href="#techstack">9. App TechStack & Security</a>
-        <a href="#workflow">10. Workflow & Mailer Footprint</a>
+        <a href="#effort">4. Effort Estimation</a>
+        <a href="#cemli">5. CEMLI / Customization Impact</a>
+        <a href="#topology">6. System Topology</a>
+        <a href="#integrations">7. Enterprise Integrations</a>
+        <a href="#database">8. Database Analysis</a>
+        <a href="#workload">9. Database Workloads</a>
+        <a href="#sizing">10. Target Sizing & Capacity</a>
+        <a href="#techstack">11. App TechStack & Security</a>
+        <a href="#workflow">12. Workflow & Mailer Footprint</a>
+        <a href="#risks">13. Risk Register</a>
     </div>
 
     <div class="main-content">
@@ -519,6 +624,47 @@ def build_html(data):
             {build_roadmap()}
         </div>
 
+        <div id="effort" class="section">
+            <div class="section-header">
+                <h2>Effort Estimation by Workstream</h2>
+            </div>
+            <p>Based on the complexity assessment, the following effort distribution is estimated across standard upgrade workstreams. These are indicative weeks of effort, not calendar duration.</p>
+            
+            <div class="grid-summary">
+                <div class="metric-card" style="border-left-color: var(--primary-blue)">
+                    <div class="metric-title">Total Estimated Effort</div>
+                    <div class="metric-value">{effort_estimation['total_weeks']} Weeks</div>
+                    <div style="font-size:13px; color:#64748b;">Approximately {effort_estimation['total_months']} months of project work</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--warning-amber)">
+                    <div class="metric-title">Complexity Classification</div>
+                    <div class="metric-value">{complexity_payload['size']}</div>
+                    <div style="font-size:13px; color:#64748b;">Score: {complexity_payload['total']}/35</div>
+                </div>
+            </div>
+            
+            <h3>Effort Distribution by Workstream</h3>
+            <table>
+                <thead>
+                    <tr><th>Workstream</th><th>Description</th><th>Estimated Weeks</th><th>% of Total</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><b>Infrastructure & Platform</b></td><td>Oracle Linux 9 deployment, network, storage provisioning</td><td>{effort_estimation['workstreams']['infra']}</td><td>{round(effort_estimation['workstreams']['infra']/effort_estimation['total_weeks']*100)}%</td></tr>
+                    <tr><td><b>Database Upgrade</b></td><td>19c/23ai upgrade, CDB conversion, character set migration</td><td>{effort_estimation['workstreams']['db']}</td><td>{round(effort_estimation['workstreams']['db']/effort_estimation['total_weeks']*100)}%</td></tr>
+                    <tr><td><b>Application Upgrade</b></td><td>EBS 12.2 installation, dual filesystem, online patching enablement</td><td>{effort_estimation['workstreams']['app']}</td><td>{round(effort_estimation['workstreams']['app']/effort_estimation['total_weeks']*100)}%</td></tr>
+                    <tr><td><b>CEMLI Remediation</b></td><td>Custom code adaptation, EBR enablement, recompilation</td><td>{effort_estimation['workstreams']['cemli']}</td><td>{round(effort_estimation['workstreams']['cemli']/effort_estimation['total_weeks']*100)}%</td></tr>
+                    <tr><td><b>Security & SSO</b></td><td>SSO re-implementation, WebGate deployment, SSL certificates</td><td>{effort_estimation['workstreams']['sso']}</td><td>{round(effort_estimation['workstreams']['sso']/effort_estimation['total_weeks']*100)}%</td></tr>
+                    <tr><td><b>Integrations</b></td><td>DB links validation, SOA/REST migration, file interfaces</td><td>{effort_estimation['workstreams']['integrations']}</td><td>{round(effort_estimation['workstreams']['integrations']/effort_estimation['total_weeks']*100)}%</td></tr>
+                    <tr><td><b>Testing (SIT/UAT/Perf)</b></td><td>Functional testing, performance validation, UAT cycles</td><td>{effort_estimation['workstreams']['testing']}</td><td>{round(effort_estimation['workstreams']['testing']/effort_estimation['total_weeks']*100)}%</td></tr>
+                    <tr><td><b>Cutover & Hypercare</b></td><td>Go-live execution, post-production support</td><td>{effort_estimation['workstreams']['cutover']}</td><td>{round(effort_estimation['workstreams']['cutover']/effort_estimation['total_weeks']*100)}%</td></tr>
+                </tbody>
+            </table>
+            
+            <div style="background: #FEF3C7; border-left: 4px solid var(--warning-amber); padding: 15px; margin-top: 20px; border-radius: 4px;">
+                <b>Note:</b> These estimates assume a dedicated team with EBS upgrade experience. Actual effort may vary based on team composition, resource availability, and discovered complexity during execution.
+            </div>
+        </div>
+
         <div id="cemli" class="section">
             <div class="section-header">
                 <h2>Application Extension (CEMLI) Impact Analysis</h2>
@@ -547,6 +693,37 @@ def build_html(data):
             <h3>Concurrent Program Technical Debt (Grouped by Engine)</h3>
             <p style="color:red; font-size:13px; font-weight:600; margin-top:0;">&#9888; Action Required: All 'Java' and 'Spawned' (C/C++) executables must be recompiled on the target OS.</p>
             {render_table(cemli_cp, ["Execution Tech Stack", "Internal Engine", "Volumes Deployed"])}
+            
+            <h3>Extended Customization Inventory</h3>
+            <div class="grid-summary" style="margin-top: 15px;">
+                <div class="metric-card">
+                    <div class="metric-title">Custom Responsibilities</div>
+                    <div class="metric-value">{safe_get(data, 'EBS_RESPONSIBILITIES', [['0', 'ACTIVE']])[0][0] if safe_get(data, 'EBS_RESPONSIBILITIES', []) else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Custom Menus</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_MENUS', [['CUSTOM_MENUS', '0']])[0][1] if safe_get(data, 'CUSTOM_MENUS', []) and len(safe_get(data, 'CUSTOM_MENUS', [])[0]) > 1 else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Custom Functions</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_FUNCTIONS', [['CUSTOM_FUNCTIONS', '0']])[0][1] if safe_get(data, 'CUSTOM_FUNCTIONS', []) and len(safe_get(data, 'CUSTOM_FUNCTIONS', [])[0]) > 1 else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Custom Lookups</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_LOOKUPS', [['CUSTOM_LOOKUPS', '0']])[0][1] if safe_get(data, 'CUSTOM_LOOKUPS', []) and len(safe_get(data, 'CUSTOM_LOOKUPS', [])[0]) > 1 else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Custom Value Sets</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_VALUE_SETS', [['CUSTOM_VALUE_SETS', '0']])[0][1] if safe_get(data, 'CUSTOM_VALUE_SETS', []) and len(safe_get(data, 'CUSTOM_VALUE_SETS', [])[0]) > 1 else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Descriptive Flexfields</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_DFF', [['DESCRIPTIVE_FLEXFIELDS', '0']])[0][1] if safe_get(data, 'CUSTOM_DFF', []) and len(safe_get(data, 'CUSTOM_DFF', [])[0]) > 1 else '0'}</div>
+                </div>
+            </div>
+            
+            <h3>Custom Database Objects by Schema</h3>
+            {render_table(safe_get(data, 'EBS_CUSTOM_OBJECTS', []), ["Schema Owner", "Object Type", "Object Count"])}
         </div>
 
         <div id="integrations" class="section">
@@ -603,6 +780,41 @@ def build_html(data):
     html += f"""
         </div>
 
+        <div id="database" class="section">
+            <div class="section-header">
+                <h2>Database Deep-Dive Analysis</h2>
+            </div>
+            <p>Comprehensive database analysis including character set, tablespace distribution, and database features usage.</p>
+            
+            <h3>Database Character Set & NLS Configuration</h3>
+            {render_table(safe_get(data, 'DB_CHARACTER_SET', []), ["NLS Parameter", "Current Value"])}
+            
+            <h3>Tablespace Distribution (GB)</h3>
+            {render_table(safe_get(data, 'DB_TABLESPACES', []), ["Tablespace Name", "Size (GB)", "Status"])}
+            
+            <h3>Redo Log Configuration</h3>
+            {render_table(safe_get(data, 'DB_REDO_LOGS', []), ["Group #", "Members", "Size (MB)", "Status"])}
+            
+            <h3>Archive Mode & Logging</h3>
+            {render_table(safe_get(data, 'DB_ARCHIVE_MODE', []), ["Log Mode", "Force Logging", "Supplemental Log"])}
+            
+            <h3>Database Features in Use</h3>
+            {render_table(safe_get(data, 'DB_FEATURES_USED', []), ["Feature Name", "Detected Usages", "Currently Used"])}
+            
+            <h3>Invalid Objects by Owner/Type</h3>
+            {render_table(safe_get(data, 'INVALID_OBJECTS_DETAIL', []), ["Schema Owner", "Object Type", "Count"])}
+            
+            <h3>AD Registered Schemas</h3>
+            <p style="font-size:13px; color:#475569;">Schemas registered with Oracle AD utilities. Custom schemas (XX*) must be registered for online patching compatibility.</p>
+            {render_table(safe_get(data, 'AD_REGISTERED_SCHEMAS', []), ["Schema Name", "Read Only"])}
+            
+            <h3>Recently Applied Patches (Last 180 Days)</h3>
+            {render_table(safe_get(data, 'AD_APPLIED_PATCHES_RECENT', []), ["Patch Name", "Patch Type", "Applied Date"])}
+            
+            <h3>Database Links Detail</h3>
+            {render_table(safe_get(data, 'DB_LINKS_DETAIL', []), ["Owner", "DB Link Name", "Host"])}
+        </div>
+
         <div id="workload" class="section">
             <div class="section-header">
                 <h2>Database Workloads & Process Engineering</h2>
@@ -613,6 +825,9 @@ def build_html(data):
 
             <h3>Top 50 Intensive Database Strains (Last 30 Days)</h3>
             {render_table(safe_get(data, 'EBS_TOP_PROGRAMS', []), ["EBS Concurrent Routine Program", "Execution Count (30d)", "Avg Historic DB Time (Hrs)"])}
+            
+            <h3>Concurrent Request Statistics (Last 30 Days)</h3>
+            {render_table(safe_get(data, 'CONCURRENT_REQUESTS_STATS', []), ["Status Code", "Phase Code", "Request Count"])}
             
             <h3>Raw Init.ora Parameters Evaluated</h3>
             {render_table(db_params, ["Init Parameter", "Assigned Boundary"])}
@@ -661,6 +876,67 @@ def build_html(data):
 
             <h3>XML Publisher (XDO) Template Demands</h3>
             {render_table(safe_get(data, 'XML_PUBLISHER_DELIVERY', []), ["Engine", "Delivery Format", "Document Volumes"])}
+        </div>
+
+        <div id="risks" class="section">
+            <div class="section-header">
+                <h2>Risk Register & Mitigation Plan</h2>
+            </div>
+            <p>Based on the automated analysis, the following risks have been identified that may impact the upgrade project timeline or success.</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Risk ID</th>
+                        <th>Category</th>
+                        <th>Risk Description</th>
+                        <th>Severity</th>
+                        <th>Business Impact</th>
+                        <th>Mitigation Strategy</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(f'''<tr>
+                        <td><b>{r['id']}</b></td>
+                        <td>{r['category']}</td>
+                        <td>{r['risk']}</td>
+                        <td><span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: {'#FEE2E2' if r['severity']=='Critical' else '#FEF3C7' if r['severity']=='High' else '#DBEAFE' if r['severity']=='Medium' else '#D1FAE5'}; color: {'#991B1B' if r['severity']=='Critical' else '#92400E' if r['severity']=='High' else '#1E40AF' if r['severity']=='Medium' else '#065F46'};">{r['severity']}</span></td>
+                        <td>{r['impact']}</td>
+                        <td>{r['mitigation']}</td>
+                    </tr>''' for r in risk_register)}
+                </tbody>
+            </table>
+            
+            <h3 style="margin-top: 30px;">Recommended Actions Before Upgrade</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 15px;">
+                <div style="background: #F0FDF4; border: 1px solid #86EFAC; padding: 15px; border-radius: 8px;">
+                    <b style="color: #166534;">✓ Pre-Upgrade Preparation</b>
+                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #166534; font-size: 14px;">
+                        <li>Run Oracle EBS Upgrade Analyzer (RUP)</li>
+                        <li>Run Database Upgrade Analyzer for 19c</li>
+                        <li>Generate ETCC compliance report</li>
+                        <li>Document all custom code inventory</li>
+                    </ul>
+                </div>
+                <div style="background: #FEF3C7; border: 1px solid #FCD34D; padding: 15px; border-radius: 8px;">
+                    <b style="color: #92400E;">⚠ Technical Remediation</b>
+                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400E; font-size: 14px;">
+                        <li>Resolve all invalid objects</li>
+                        <li>Enable edition-based custom schemas</li>
+                        <li>Convert UTL_FILE_DIR to directories</li>
+                        <li>Test all database links connectivity</li>
+                    </ul>
+                </div>
+                <div style="background: #DBEAFE; border: 1px solid #93C5FD; padding: 15px; border-radius: 8px;">
+                    <b style="color: #1E40AF;">📋 Planning & Governance</b>
+                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #1E40AF; font-size: 14px;">
+                        <li>Define cutover window requirements</li>
+                        <li>Plan minimum 3 rehearsal cycles</li>
+                        <li>Establish rollback procedures</li>
+                        <li>Coordinate with all integration teams</li>
+                    </ul>
+                </div>
+            </div>
         </div>
 
     </div>

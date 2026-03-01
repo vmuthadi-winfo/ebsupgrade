@@ -165,6 +165,7 @@ AND (
     fo.profile_option_name LIKE '%REST%' OR
     fo.profile_option_name IN (
         'APPS_FRAMEWORK_AGENT',
+        'APPS_AUTH_AGENT',
         'APPS_SERVLET_AGENT', 
         'ICX_FORMS_LAUNCHER',
         'ICX_SESSION_TIMEOUT',
@@ -287,6 +288,118 @@ prompt [SECTION_END:CEMLI_ALERTS]
 prompt [SECTION_START:CEMLI_AME_RULES]
 select 'AME_CUSTOM_RULES' ||'|'|| count(*) from apps.ame_rules where rule_key like 'XX%' or created_by > 1;
 prompt [SECTION_END:CEMLI_AME_RULES]
+
+-- Enhanced Data Collection for Upgrade Analysis
+
+prompt [SECTION_START:AD_TXK_VERSIONS]
+select 'AD' ||'|'|| (select coalesce(patch_level,'UNKNOWN') from apps.fnd_product_installations where application_id = 0)
+from dual;
+select 'TXK' ||'|'|| (select coalesce(patch_level,'UNKNOWN') from apps.fnd_product_installations where application_id = 535)
+from dual;
+select 'FND' ||'|'|| (select coalesce(patch_level,'UNKNOWN') from apps.fnd_product_installations where application_id = 0)
+from dual;
+prompt [SECTION_END:AD_TXK_VERSIONS]
+
+prompt [SECTION_START:DB_CHARACTER_SET]
+select parameter ||'|'|| value from nls_database_parameters where parameter in ('NLS_CHARACTERSET','NLS_NCHAR_CHARACTERSET','NLS_LANGUAGE','NLS_TERRITORY','NLS_DATE_FORMAT');
+prompt [SECTION_END:DB_CHARACTER_SET]
+
+prompt [SECTION_START:DB_TABLESPACES]
+select tablespace_name ||'|'|| round(sum(bytes)/1024/1024/1024,2) ||'|'|| status
+from dba_data_files group by tablespace_name, status order by 2 desc;
+prompt [SECTION_END:DB_TABLESPACES]
+
+prompt [SECTION_START:DB_REDO_LOGS]
+select group# ||'|'|| members ||'|'|| round(bytes/1024/1024,0) ||'|'|| status from v$log;
+prompt [SECTION_END:DB_REDO_LOGS]
+
+prompt [SECTION_START:DB_ARCHIVE_MODE]
+select log_mode ||'|'|| force_logging ||'|'|| supplemental_log_data_min from v$database;
+prompt [SECTION_END:DB_ARCHIVE_MODE]
+
+prompt [SECTION_START:DB_FEATURES_USED]
+select name ||'|'|| detected_usages ||'|'|| currently_used from dba_feature_usage_statistics where detected_usages > 0 and rownum <= 30 order by detected_usages desc;
+prompt [SECTION_END:DB_FEATURES_USED]
+
+prompt [SECTION_START:INVALID_OBJECTS_DETAIL]
+select owner ||'|'|| object_type ||'|'|| count(*) from dba_objects where status = 'INVALID' and owner not in ('SYS','SYSTEM','WMSYS','XDB','CTXSYS','MDSYS','OLAPSYS','ORDDATA','ORDSYS') group by owner, object_type order by 3 desc;
+prompt [SECTION_END:INVALID_OBJECTS_DETAIL]
+
+prompt [SECTION_START:AD_REGISTERED_SCHEMAS]
+select oracle_username ||'|'|| read_only_flag from apps.ad_oracle_schemas order by oracle_username;
+prompt [SECTION_END:AD_REGISTERED_SCHEMAS]
+
+prompt [SECTION_START:ONLINE_PATCHING_STATUS]
+select fs_clone_status ||'|'|| adop_valid from apps.fnd_appl_tops where rownum = 1;
+prompt [SECTION_END:ONLINE_PATCHING_STATUS]
+
+prompt [SECTION_START:AD_APPLIED_PATCHES_RECENT]
+select patch_name ||'|'|| patch_type ||'|'|| to_char(creation_date,'YYYY-MM-DD') from apps.ad_applied_patches where creation_date >= sysdate - 180 order by creation_date desc;
+prompt [SECTION_END:AD_APPLIED_PATCHES_RECENT]
+
+prompt [SECTION_START:EBS_RESPONSIBILITIES]
+select count(*) ||'|'|| decode(end_date, null, 'ACTIVE', 'INACTIVE') from apps.fnd_responsibility where responsibility_key like 'XX%' or responsibility_key like 'CUST%' group by decode(end_date, null, 'ACTIVE', 'INACTIVE');
+prompt [SECTION_END:EBS_RESPONSIBILITIES]
+
+prompt [SECTION_START:CUSTOM_MENUS]
+select 'CUSTOM_MENUS' ||'|'|| count(*) from apps.fnd_menus where menu_name like 'XX%' or menu_name like 'CUST%';
+prompt [SECTION_END:CUSTOM_MENUS]
+
+prompt [SECTION_START:CUSTOM_FUNCTIONS]
+select 'CUSTOM_FUNCTIONS' ||'|'|| count(*) from apps.fnd_form_functions where function_name like 'XX%' or function_name like 'CUST%';
+prompt [SECTION_END:CUSTOM_FUNCTIONS]
+
+prompt [SECTION_START:CUSTOM_LOOKUPS]
+select 'CUSTOM_LOOKUPS' ||'|'|| count(distinct lookup_type) from apps.fnd_lookup_values where lookup_type like 'XX%' or lookup_type like 'CUST%';
+prompt [SECTION_END:CUSTOM_LOOKUPS]
+
+prompt [SECTION_START:CUSTOM_VALUE_SETS]
+select 'CUSTOM_VALUE_SETS' ||'|'|| count(*) from apps.fnd_flex_value_sets where flex_value_set_name like 'XX%' or flex_value_set_name like 'CUST%';
+prompt [SECTION_END:CUSTOM_VALUE_SETS]
+
+prompt [SECTION_START:CUSTOM_DFF]
+select 'DESCRIPTIVE_FLEXFIELDS' ||'|'|| count(*) from apps.fnd_descriptive_flexs_vl where descriptive_flexfield_name like 'XX%' or title like '%Custom%';
+prompt [SECTION_END:CUSTOM_DFF]
+
+prompt [SECTION_START:SCHEDULER_JOBS]
+select owner ||'|'|| job_name ||'|'|| state from dba_scheduler_jobs where owner not in ('SYS','SYSTEM','EXFSYS') and rownum <= 50 order by owner;
+prompt [SECTION_END:SCHEDULER_JOBS]
+
+prompt [SECTION_START:DB_LINKS_DETAIL]
+select owner ||'|'|| db_link ||'|'|| host from dba_db_links order by owner, db_link;
+prompt [SECTION_END:DB_LINKS_DETAIL]
+
+prompt [SECTION_START:LOB_SIZES]
+select owner ||'|'|| table_name ||'|'|| column_name ||'|'|| segment_name from dba_lobs where owner in ('APPS','APPLSYS') and rownum <= 20;
+prompt [SECTION_END:LOB_SIZES]
+
+prompt [SECTION_START:MATERIALIZED_VIEWS]
+select owner ||'|'|| mview_name ||'|'|| refresh_mode ||'|'|| last_refresh_date from dba_mviews where owner not in ('SYS','SYSTEM') and rownum <= 30;
+prompt [SECTION_END:MATERIALIZED_VIEWS]
+
+prompt [SECTION_START:PARTITIONED_TABLES]
+select owner ||'|'|| table_name ||'|'|| partitioning_type ||'|'|| partition_count from dba_part_tables where owner in ('APPS','AP','AR','GL','PO','INV','HR','PA') and rownum <= 30;
+prompt [SECTION_END:PARTITIONED_TABLES]
+
+prompt [SECTION_START:EBS_TIMEZONES]
+select timezone_code ||'|'|| enabled_flag from apps.fnd_timezones_b where enabled_flag = 'Y';
+prompt [SECTION_END:EBS_TIMEZONES]
+
+prompt [SECTION_START:EBS_TERRITORIES]
+select territory_code ||'|'|| count(*) as orgs from apps.hr_all_organization_units group by territory_code having count(*) > 0 order by 2 desc;
+prompt [SECTION_END:EBS_TERRITORIES]
+
+prompt [SECTION_START:CONCURRENT_REQUESTS_STATS]
+select status_code ||'|'|| phase_code ||'|'|| count(*) from apps.fnd_concurrent_requests where requested_start_date > sysdate - 30 group by status_code, phase_code;
+prompt [SECTION_END:CONCURRENT_REQUESTS_STATS]
+
+prompt [SECTION_START:ATTACHMENTS_COUNT]
+select 'ATTACHMENTS' ||'|'|| count(*) from apps.fnd_attached_documents;
+prompt [SECTION_END:ATTACHMENTS_COUNT]
+
+prompt [SECTION_START:AUDIT_TABLES]
+select 'AUDIT_TABLES' ||'|'|| count(*) from dba_tables where table_name like '%_A' and owner = 'APPS';
+prompt [SECTION_END:AUDIT_TABLES]
 
 
 exit;

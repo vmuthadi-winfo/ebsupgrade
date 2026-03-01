@@ -101,13 +101,14 @@ Corrected context file variable names to match actual Oracle EBS context XML str
 - `s_tools_version` → `s_tools_oh_version`
 - Added `s_fmw_home`, `s_wls_home`, `s_ne_base`, `s_file_edition_name`
 
-### 10. Oracle EBS Profile Names (FIXED ✅)
+### 10. Oracle EBS Profile Names (VALIDATED ✅)
 
 **File:** `ebs_upgrade_analyzer_collector.sh` and `generate_upgrade_report.py`
 
-Corrected profile option names:
-- `APPS_AUTH_AGENT` (doesn't exist) → `APPS_SERVLET_AGENT`
-- Added proper SSO profiles: `FND_SSO_COOKIE_DOMAIN`, `APPS_SSO_COOKIE_DOMAIN`, `APPS_SSO_PROFILE`
+Validated and enhanced profile option collection:
+- `APPS_AUTH_AGENT` - Confirmed correct Oracle EBS profile
+- `APPS_FRAMEWORK_AGENT` - Confirmed correct
+- Added additional SSO profiles: `FND_SSO_COOKIE_DOMAIN`, `APPS_SSO_COOKIE_DOMAIN`, `APPS_SSO_PROFILE`
 - Added `FND_WEB_SERVER`, `APPLICATIONS_HOME_PAGE`, `ICX_DISCOVERER_LAUNCHER`
 
 ### 11. SQL Syntax Error (FIXED ✅)
@@ -136,6 +137,37 @@ select count(*) from apps.jdr_paths where path_docid is not null and path_name l
 select count(*) from apps.jdr_paths where path_type = 'DOCUMENT' 
   and (path_name like '/oracle/apps/%/customizations/%' or path_name like '%/XX%');
 ```
+
+---
+
+## Enhancements Added
+
+### Enhanced Data Collection
+
+Added 20+ new data collection queries for comprehensive upgrade analysis:
+
+| Data Category | New Sections Added |
+|--------------|-------------------|
+| **Database** | Character set & NLS, Tablespaces, Redo logs, Archive mode, Database features in use |
+| **AD/TXK** | AD/TXK/FND patch levels, Recent patches (180 days), Online patching status |
+| **Customizations** | Custom responsibilities, menus, functions, lookups, value sets, DFFs |
+| **Infrastructure** | Scheduler jobs, Materialized views, Partitioned tables |
+| **Workload** | Concurrent request statistics, Attachments count, Audit tables |
+
+### Enhanced Reporting
+
+Added 3 new major report sections:
+
+1. **Effort Estimation by Workstream** - Calculates estimated weeks of effort across 8 workstreams based on complexity score
+2. **Database Deep-Dive Analysis** - Comprehensive database configuration and health metrics
+3. **Risk Register & Mitigation Plan** - Auto-generated risk assessment with severity ratings and mitigation strategies
+
+### Improved Customization Analysis
+
+Extended CEMLI section with detailed inventory:
+- Custom Responsibilities, Menus, Functions
+- Custom Lookups, Value Sets, Descriptive Flexfields
+- Custom database objects breakdown by schema/type
 
 ---
 
