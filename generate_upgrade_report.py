@@ -838,7 +838,7 @@ def build_html(data):
     
     # Process New Advanced Extractions
     db_dataguard = safe_get(data, 'DB_DATAGUARD', [])
-    has_dataguard = len(db_dataguard) > 0 and db_dataguard[0][0] != 'N/A'
+    has_dataguard = len(db_dataguard) > 0 and len(db_dataguard[0]) > 0 and db_dataguard[0][0] != 'N/A'
     db_backups = safe_get(data, 'DB_BACKUP_SUMMARY', [])
     top_10_tables = safe_get(data, 'TOP_10_TABLES', [])
     user_profiles = safe_get(data, 'DB_USER_PROFILES', [])
