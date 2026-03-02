@@ -116,7 +116,7 @@ where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
     (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
 union all
-select node_name ||'|common_top|'|| extractvalue(xmltype(text), '//*[local-name()="s_common_top"]')
+select node_name ||'|common_top|'|| extractvalue(xmltype(text), '//*[local-name()="s_com"]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
@@ -743,12 +743,18 @@ where rownum <= 200;
 prompt [SECTION_END:PATCHED_FILES_RECENT]
 
 -- CEMLI Extract: Custom Application Objects
+-- Filter for non-Oracle-seeded applications (created by non-system users OR XX-prefixed)
 
 prompt [SECTION_START:CEMLI_CUSTOM_APPLICATIONS]
 select a.application_id ||'|'|| a.application_name ||'|'|| a.application_short_name ||'|'|| a.basepath ||'|'|| to_char(a.creation_date, 'YYYY-MM-DD')
 from apps.fnd_application_vl a, apps.fnd_user u
 where u.user_id = a.created_by
-and ((u.user_name not like 'ORACLE12%' and u.user_name not in ('INITIAL SETUP','AUTOINSTALL') and a.application_id >= 20000) or a.application_short_name like 'XX%')
+and (
+    (u.user_name not like 'ORACLE%' 
+     and u.user_name not in ('INITIAL SETUP','AUTOINSTALL','SYSADMIN') 
+     and a.application_id >= 20000) 
+    or a.application_short_name like 'XX%'
+)
 and rownum <= 100;
 prompt [SECTION_END:CEMLI_CUSTOM_APPLICATIONS]
 
