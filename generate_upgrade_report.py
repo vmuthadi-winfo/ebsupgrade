@@ -100,6 +100,8 @@ def determine_integrations(profiles, apex_ords_data):
     
     fwk_agent = ""
     auth_agent = ""
+    sso_mode = ""
+    endeca_active_count = 0
 
     for row in profiles:
         if len(row) < 2: continue
@@ -108,37 +110,51 @@ def determine_integrations(profiles, apex_ords_data):
 
         if name == 'APPS_FRAMEWORK_AGENT': fwk_agent = value
         if name == 'APPS_AUTH_AGENT': auth_agent = value
+        if name == 'APPS_SSO': sso_mode = value.upper()  # Track SSO mode - SSWA means standard login
         
-        if 'APEX' in name:
+        # APEX detection - only FND_APEX_URL with actual URL value
+        if name == 'FND_APEX_URL':
             if value == 'NOT_DEFINED':
                 integ['APEX'] = {'status': 'Not Configured', 'desc': 'APEX Profile exists but has no value at Site Level.', 'color': '--border-grey', 'roadmap': 'No action required.'}
             else:
                 apex_ver = next((row[1] for row in apex_ords_data if len(row) > 1 and row[0] == 'Oracle Application Express'), 'Unknown')
                 ords_ver = next((row[1] for row in apex_ords_data if len(row) > 1 and row[0] == 'Oracle REST Data Services'), 'Unknown')
                 version_str = f"DB reports APEX v{apex_ver} and ORDS v{ords_ver}." if apex_ords_data and apex_ords_data[0][0] != 'N/A' else "Version data not found in registry."
-                integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}. {version_str} Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
+                integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}={value}. {version_str} Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
         
-        if 'ECC' in name:
+        # ECC detection - specific profiles for Enterprise Command Center
+        ecc_profiles = ['FND_ENDECA_PORTAL_URL', 'FND_ENDECA_INTEGRATOR_URL']
+        if name in ecc_profiles:
             if value == 'NOT_DEFINED':
                 integ['ECC'] = {'status': 'Not Configured', 'desc': 'ECC Command Center Profiles exist but are blank.', 'color': '--border-grey', 'roadmap': 'Consider deploying ECC V12 for modern reporting.'}
             else:
-                integ['ECC'] = {'status': 'Active', 'desc': 'Command Center profiles found.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
+                integ['ECC'] = {'status': 'Active', 'desc': f'Command Center configured via {name}.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
         
-        if 'SOA' in name or 'REST' in name or 'ISG' in name:
+        # SOA/ISG detection - specific profiles that indicate actual ISG/REST service usage
+        isg_profiles = ['FND_SOA_GENERIC_SERVICE_WSDL', 'INV_EBI_SERVER_URL', 'INV_EBI_SOASERVER_USER', 'PA_EBI_SOASERVER_USER']
+        if name in isg_profiles:
             if value != 'NOT_DEFINED':
-                integ['SOA_ISG'] = {'status': 'Active', 'desc': 'SOA/ISG/REST detected. Integrated SOA Gateway has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
+                integ['SOA_ISG'] = {'status': 'Active', 'desc': f'Integrated SOA Gateway detected via {name}. ISG has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
         
-        if 'OBIEE' in name or 'OAC' in name:
-            if value != 'NOT_DEFINED':
-                integ['OBIEE'] = {'status': 'Active', 'desc': 'OBIEE / OAC URL Profiles defined.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
+        # OBIEE detection - specific profiles
+        if name in ['FND_OBIEE_URL', 'HRI_IMPL_OBIEE']:
+            if value != 'NOT_DEFINED' and value.upper() not in ['N', 'NO']:
+                integ['OBIEE'] = {'status': 'Active', 'desc': f'OBIEE/OAC configured via {name}={value}.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
         
-        if 'ENDECA' in name:
-            if value != 'NOT_DEFINED':
-                integ['ENDECA'] = {'status': 'Active', 'desc': 'Endeca extensions detected.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
+        # ENDECA detection - profiles that indicate actual Endeca usage (not just existence of profile)
+        # Only count profiles that have real values (not NOT_DEFINED)
+        endeca_active_profiles = [
+            'HR_EXTENSION_FOR_ENDECA', 'HZ_ENDECA_DISPLAY_CURRENCY', 'CN_ENDECA_VIEW_PERIOD',
+            'ONT_ENDECA_DISPLAY_CURRENCY', 'ONT_ENDECA_ADDL_INFO', 'AHL_ENDECA_HISTORICAL_TRANSACTION',
+            'CS_ENDECA_SR_LOAD_START_DATE', 'USE_WO_ORG_FOR_EAM_ENDECA_SECURITY'
+        ]
+        if name in endeca_active_profiles and value != 'NOT_DEFINED' and value.upper() not in ['N', 'NO', 'NONE']:
+            endeca_active_count += 1
         
-        if 'VERTEX' in name:
+        # VERTEX detection
+        if name in ['HR_US_VERTEX_WEB_SERVICE_HOST', 'HR_US_VERTEX_WEB_SERVICE_PORT']:
             if value != 'NOT_DEFINED':
-                integ['VERTEX'] = {'status': 'Active', 'desc': 'Vertex Tax Integration.', 'color': '--danger-red', 'roadmap': 'Verify Vertex O series certification matrix for target OS and EBS 12.2.'}
+                integ['VERTEX'] = {'status': 'Active', 'desc': f'Vertex Tax Integration detected via {name}.', 'color': '--danger-red', 'roadmap': 'Verify Vertex O series certification matrix for target OS and EBS 12.2.'}
         
         if 'AVALARA' in name:
             if value != 'NOT_DEFINED':
@@ -156,20 +172,24 @@ def determine_integrations(profiles, apex_ords_data):
             if value != 'NOT_DEFINED':
                 integ['GRC'] = {'status': 'Active', 'desc': 'Oracle GRC (Governance Risk Compliance).', 'color': '--primary-blue', 'roadmap': 'Ensure AACG connectors map correctly against target OS versions.'}
         
-        sso_profiles = [
-            'APPS_AUTH_AGENT', 'FND_SSO_COOKIE_DOMAIN', 'APPS_SSO_COOKIE_DOMAIN',
-            'APPS_SSO_PROFILE', 'APPS_SSO_AUTO_REDIRECT', 'APPS_OAM_APPL_SERVER_URL'
-        ]
-        if name in sso_profiles:
-            if value == 'NOT_DEFINED':
-                 if integ['SSO']['status'] == 'Disabled': 
-                      integ['SSO'] = {'status': 'Not Configured', 'desc': f'SSO Profile ({name}) is present but blank. Standard FND login assumed.', 'color': '--border-grey', 'roadmap': 'Standard FND User migration.'}
-            else:
-                 integ['SSO'] = {'status': 'Active', 'desc': f'SSO/OAM configurations detected via {name}.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
+        # SSO detection - specific profiles that indicate OAM/external SSO (not SSWA standard login)
+        oam_sso_profiles = ['APPS_OAM_APPL_SERVER_URL', 'FND_SSO_COOKIE_DOMAIN', 'APPS_SSO_COOKIE_DOMAIN', 'APPS_SSO_PROFILE']
+        if name in oam_sso_profiles and value != 'NOT_DEFINED':
+            integ['SSO'] = {'status': 'Active', 'desc': f'OAM/SSO configurations detected via {name}.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
+    
+    # Set ENDECA status based on count of active profiles
+    if endeca_active_count >= 2:
+        integ['ENDECA'] = {'status': 'Active', 'desc': f'{endeca_active_count} Endeca-related profiles with values detected. Information Discovery may be in use.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
+    elif endeca_active_count == 1:
+        integ['ENDECA'] = {'status': 'Partial', 'desc': 'Limited Endeca profile configuration found.', 'color': '--warning-amber', 'roadmap': 'Verify if Endeca Information Discovery is actively used. Consider ECC migration.'}
             
-    # Check if agents differ indicating external SSO
-    if auth_agent and fwk_agent and auth_agent != fwk_agent:
-         integ['SSO'] = {'status': 'Active', 'desc': 'Potential SSO / Access Gate detected via disjointed Auth & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
+    # Check if agents differ indicating external SSO (only if auth_agent has a real value)
+    if auth_agent and auth_agent != 'NOT_DEFINED' and fwk_agent and auth_agent != fwk_agent:
+        integ['SSO'] = {'status': 'Active', 'desc': 'External SSO detected via disjointed Auth & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
+    
+    # Override SSO if mode is SSWA (standard EBS login, not OAM)
+    if sso_mode == 'SSWA' and integ['SSO']['status'] != 'Active':
+        integ['SSO'] = {'status': 'Standard', 'desc': 'APPS_SSO=SSWA indicates standard EBS Self-Service login. No external SSO/OAM integration.', 'color': '--border-grey', 'roadmap': 'Standard FND User migration with no SSO dependencies.'}
 
     return integ
 
@@ -1164,18 +1184,9 @@ def build_html(data):
             <h3>Base TechStack Context (12.1.3 Baseline)</h3>
             """
     
-    if len(all_nodes_context) > 0 and all_nodes_context[0][0] != 'N/A':
-        techstack_rows = []
-        for c in all_nodes_context:
-            if len(c) > 13:
-                techstack_rows.append([c[0], 'ATG_VERSION', c[6]])
-                techstack_rows.append([c[0], 'TOOLS_VERSION', c[7]])
-                techstack_rows.append([c[0], 'OHS_VERSION', c[8]])
-                techstack_rows.append([c[0], 'JDK_TARGET', c[9]])
-                techstack_rows.append([c[0], 'ADKEYSTORE', c[11]])
-                techstack_rows.append([c[0], 'TRUSTSTORE', c[12]])
-                techstack_rows.append([c[0], 'WEB_SSL_DIR', c[13]])
-        html += render_table(techstack_rows, ["Node Target", "Topology Property", "Discovered Deployment Path / Version"])
+    # Use ctx_dirs to build techstack information
+    if len(ctx_dirs) > 0 and ctx_dirs[0][0] != 'N/A':
+        html += render_table(ctx_dirs, ["Physical Node", "Configuration Property", "Deployment Path / Value"])
     else:
         html += "<p style='color:#777; font-size:14px; font-style:italic;'>TechStack Context not available in Registry.</p>"
         
