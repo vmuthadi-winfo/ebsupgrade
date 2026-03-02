@@ -922,11 +922,11 @@ prompt [SECTION_END:TOP_100_CONC_PROGS_BY_AVG_TIME]
 
 prompt [SECTION_START:FLAGGED_FILES_FOR_UPGRADE]
 select * from (
-select af.app_short_name ||'|'|| af.subdir ||'|'|| af.filename ||'|'|| afv.version ||'|'|| afv.translation_level ||'|'|| to_char(afv.version_date, 'YYYY-MM-DD')
+select af.app_short_name ||'|'|| af.subdir ||'|'|| af.filename ||'|'|| afv.version ||'|'|| afv.translation_level ||'|'|| to_char(afv.creation_date, 'YYYY-MM-DD')
 from apps.ad_files af, apps.ad_file_versions afv
 where af.file_id = afv.file_id
 and (af.filename like 'XX%' or af.filename like 'xx%' or af.subdir like '%/custom%' or af.subdir like '%/XX%')
-order by afv.version_date desc)
+order by afv.creation_date desc)
 where rownum <= 500;
 prompt [SECTION_END:FLAGGED_FILES_FOR_UPGRADE]
 
@@ -1193,7 +1193,7 @@ prompt [SECTION_END:DATA_SET_OF_BOOKS]
 prompt [SECTION_START:DATA_LEGAL_ENTITIES]
 select xep.legal_entity_id ||'|'|| xep.name ||'|'|| xep.legal_entity_identifier ||'|'|| nvl(hla.country, 'N/A') ||'|'|| nvl(hla.address_line_1, 'N/A') ||'|'|| to_char(xep.effective_from, 'YYYY-MM-DD') ||'|'|| nvl(to_char(xep.effective_to, 'YYYY-MM-DD'), 'Active')
 from apps.xle_entity_profiles xep, apps.hr_locations_all hla
-where xep.location_id = hla.location_id(+);
+where xep.registered_address_id = hla.location_id(+);
 prompt [SECTION_END:DATA_LEGAL_ENTITIES]
 
 prompt [SECTION_START:DATA_OPERATING_UNITS]
