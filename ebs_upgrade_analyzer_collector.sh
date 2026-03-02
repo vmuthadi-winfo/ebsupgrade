@@ -654,7 +654,9 @@ select owner ||'|'|| object_type ||'|'|| count(*) from dba_objects where status 
 prompt [SECTION_END:INVALID_OBJECTS_DETAIL]
 
 prompt [SECTION_START:AD_REGISTERED_SCHEMAS]
-select oracle_username ||'|'|| read_only_flag from apps.fnd_oracle_userid order by oracle_username;
+select oracle_username ||'|'|| read_only_flag from apps.fnd_oracle_userid 
+where oracle_username like 'XX%' or oracle_username like 'CUSTOM%'
+order by oracle_username;
 prompt [SECTION_END:AD_REGISTERED_SCHEMAS]
 
 prompt [SECTION_START:ONLINE_PATCHING_STATUS]

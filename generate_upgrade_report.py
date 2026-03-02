@@ -566,6 +566,30 @@ def build_html(data):
     db_links = len(db_links_list) if db_links_list and db_links_list[0][0] != 'N/A' else 0
     directories = safe_get(data, 'DBA_DIRECTORIES', [['0']])[0][0]
 
+    # Process RAC Database Information
+    rac_status = safe_get(data, 'RAC_STATUS', [])
+    rac_instances = safe_get(data, 'RAC_INSTANCES', [])
+    rac_instance_params = safe_get(data, 'RAC_INSTANCE_PARAMETERS', [])
+    rac_interconnect = safe_get(data, 'RAC_INTERCONNECT', [])
+    rac_services = safe_get(data, 'RAC_SERVICES', [])
+    rac_database_info = safe_get(data, 'RAC_DATABASE_INFO', [])
+    rac_asm_diskgroups = safe_get(data, 'RAC_ASM_DISKGROUPS', [])
+    rac_gv_sysstat = safe_get(data, 'RAC_GV_SYSSTAT', [])
+    rac_thread_redo = safe_get(data, 'RAC_THREAD_REDO', [])
+    rac_scan_listeners = safe_get(data, 'RAC_SCAN_LISTENERS', [])
+    
+    # Determine if database is RAC
+    is_rac = False
+    rac_instance_count = 1
+    for row in rac_status:
+        if len(row) >= 2 and row[0] == 'CLUSTER_DATABASE' and row[1].upper() == 'TRUE':
+            is_rac = True
+        if len(row) >= 2 and row[0] == 'INSTANCE_COUNT':
+            try:
+                rac_instance_count = int(row[1])
+            except (ValueError, TypeError):
+                rac_instance_count = 1
+
     # Process CEMLI Details
     cemli_cp = safe_get(data, 'CEMLI_CONCURRENT_PROGRAMS', [])
     
@@ -1038,6 +1062,60 @@ def build_html(data):
             </div>
             <p>Comprehensive database analysis including character set, tablespace distribution, and database features usage.</p>
             
+            <h3>RAC (Real Application Clusters) Configuration</h3>
+            <div class="grid-summary">
+                <div class="metric-card" style="border-left-color: {'var(--primary-blue)' if is_rac else 'var(--success-green)'}">
+                    <div class="metric-title">Cluster Database</div>
+                    <div class="metric-value">{'RAC' if is_rac else 'Single Instance'}</div>
+                    <div style="font-size:13px; color:#64748b;">{'Multi-node cluster deployment' if is_rac else 'Standard single-node database'}</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--primary-blue)">
+                    <div class="metric-title">Instance Count</div>
+                    <div class="metric-value">{rac_instance_count}</div>
+                    <div style="font-size:13px; color:#64748b;">{'Active RAC instances' if is_rac else 'Database instance'}</div>
+                </div>
+            </div>
+    """
+    
+    # Add RAC-specific sections if it's a RAC database
+    if is_rac:
+        html += f"""
+            <h3>RAC Instance Details</h3>
+            <p style="font-size:13px; color:#475569;">Details of all RAC instances including host, version, status, and startup time.</p>
+            {render_table(rac_instances, ["Instance ID", "Instance Name", "Host Name", "Version", "Status", "Startup Time", "DB Status", "Instance Role"])}
+            
+            <h3>RAC Database Information</h3>
+            {render_table(rac_database_info, ["Property", "Value"])}
+            
+            <h3>RAC Instance Parameters</h3>
+            <p style="font-size:13px; color:#475569;">Critical init parameters per RAC instance. Parameters like SGA, PGA, and undo tablespace may differ between instances.</p>
+            {render_drilldown_table("View RAC Instance Parameters", rac_instance_params, ["Instance ID", "Parameter Name", "Value", "Is Default"])}
+            
+            <h3>Cluster Interconnect Configuration</h3>
+            <p style="font-size:13px; color:#475569;">Private interconnect network used for cache fusion and inter-instance communication.</p>
+            {render_table(rac_interconnect, ["Instance ID", "Interface Name", "IP Address", "Is Public", "Source"])}
+            
+            <h3>RAC Services</h3>
+            <p style="font-size:13px; color:#475569;">Database services configured for workload management and failover.</p>
+            {render_drilldown_table("View RAC Services", rac_services, ["Instance ID", "Service Name", "Network Name", "Enabled", "AQ HA Notifications", "CLB Goal", "Goal"])}
+            
+            <h3>SCAN & Local Listeners</h3>
+            {render_table(rac_scan_listeners, ["Listener Type", "Configuration"])}
+            
+            <h3>ASM Disk Groups</h3>
+            <p style="font-size:13px; color:#475569;">Automatic Storage Management disk groups used for database storage.</p>
+            {render_table(rac_asm_diskgroups, ["Disk Group Name", "State", "Type", "Total MB", "Free MB", "% Free"])}
+            
+            <h3>RAC Redo Log Threads</h3>
+            <p style="font-size:13px; color:#475569;">Redo log groups by thread - each RAC instance has its own redo thread.</p>
+            {render_table(rac_thread_redo, ["Thread #", "Group #", "Members", "Size (MB)", "Status", "Archived"])}
+            
+            <h3>Global Cache Statistics</h3>
+            <p style="font-size:13px; color:#475569;">Cache fusion statistics for inter-instance block transfers. High values indicate active inter-node communication.</p>
+            {render_drilldown_table("View Global Cache Statistics", rac_gv_sysstat, ["Instance ID", "Statistic Name", "Value"])}
+        """
+    
+    html += f"""
             <h3>Database Character Set & NLS Configuration</h3>
             {render_table(safe_get(data, 'DB_CHARACTER_SET', []), ["NLS Parameter", "Current Value"])}
             
@@ -1056,8 +1134,8 @@ def build_html(data):
             <h3>Invalid Objects by Owner/Type</h3>
             {render_drilldown_table("View Invalid Schema Objects", safe_get(data, 'INVALID_OBJECTS_DETAIL', []), ["Schema Owner", "Object Name", "Object Type", "Status", "Last DDL Timestamp"])}
             
-            <h3>AD Registered Schemas</h3>
-            <p style="font-size:13px; color:#475569;">Schemas registered with Oracle AD utilities. Custom schemas (XX*) must be registered for online patching compatibility.</p>
+            <h3>Custom AD Registered Schemas</h3>
+            <p style="font-size:13px; color:#475569;">Custom schemas (XX*, CUSTOM*) registered with Oracle AD utilities. These must be properly registered for online patching compatibility.</p>
             {render_table(safe_get(data, 'AD_REGISTERED_SCHEMAS', []), ["Schema Name", "Read Only"])}
             
             <h3>Recently Applied Patches (Last 180 Days)</h3>

@@ -82,7 +82,7 @@
 <body>
     <div class="header">
         <h1>Oracle EBS & Database Upgrade Analysis</h1>
-        <div style="font-size:14px; opacity:0.9; font-weight: 500;">Collection Timestamp: 2026-03-02 15:29</div>
+        <div style="font-size:14px; opacity:0.9; font-weight: 500;">Collection Timestamp: 2026-03-02 17:34</div>
     </div>
 
     <div class="nav-sidebar">
@@ -500,6 +500,20 @@
             </div>
             <p>Comprehensive database analysis including character set, tablespace distribution, and database features usage.</p>
             
+            <h3>RAC (Real Application Clusters) Configuration</h3>
+            <div class="grid-summary">
+                <div class="metric-card" style="border-left-color: var(--success-green)">
+                    <div class="metric-title">Cluster Database</div>
+                    <div class="metric-value">Single Instance</div>
+                    <div style="font-size:13px; color:#64748b;">Standard single-node database</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--primary-blue)">
+                    <div class="metric-title">Instance Count</div>
+                    <div class="metric-value">1</div>
+                    <div style="font-size:13px; color:#64748b;">Database instance</div>
+                </div>
+            </div>
+    
             <h3>Database Character Set & NLS Configuration</h3>
             <table><thead><tr><th>NLS Parameter</th><th>Current Value</th></tr></thead><tbody><tr><td>NLS_DATE_FORMAT</td><td>DD-MON-RR</td></tr><tr><td>NLS_NCHAR_CHARACTERSET</td><td>UTF8</td></tr><tr><td>NLS_CHARACTERSET</td><td>AL32UTF8</td></tr><tr><td>NLS_TERRITORY</td><td>AMERICA</td></tr><tr><td>NLS_LANGUAGE</td><td>AMERICAN</td></tr></tbody></table>
             
@@ -536,8 +550,8 @@
     </details>
     
             
-            <h3>AD Registered Schemas</h3>
-            <p style="font-size:13px; color:#475569;">Schemas registered with Oracle AD utilities. Custom schemas (XX*) must be registered for online patching compatibility.</p>
+            <h3>Custom AD Registered Schemas</h3>
+            <p style="font-size:13px; color:#475569;">Custom schemas (XX*, CUSTOM*) registered with Oracle AD utilities. These must be properly registered for online patching compatibility.</p>
             <table><thead><tr><th>Schema Name</th><th>Read Only</th></tr></thead><tbody><tr><td>AHL</td><td>A</td></tr><tr><td>AK</td><td>A</td></tr><tr><td>AMS</td><td>A</td></tr><tr><td>AMV</td><td>A</td></tr><tr><td>AP</td><td>A</td></tr><tr><td>APEX_PUBLIC_USER</td><td>K</td></tr><tr><td>APPLSYS</td><td>E</td></tr><tr><td>APPLSYSPUB</td><td>C</td></tr><tr><td>APPS</td><td>U</td></tr><tr><td>APPS_NE</td><td>Z</td></tr><tr><td>AR</td><td>A</td></tr><tr><td>ASF</td><td>A</td></tr><tr><td>ASG</td><td>A</td></tr><tr><td>ASL</td><td>A</td></tr><tr><td>ASN</td><td>A</td></tr><tr><td>ASO</td><td>A</td></tr><tr><td>ASP</td><td>A</td></tr><tr><td>AST</td><td>A</td></tr><tr><td>AX</td><td>A</td></tr><tr><td>AZ</td><td>A</td></tr><tr><td>BEN</td><td>A</td></tr><tr><td>BIC</td><td>A</td></tr><tr><td>BIM</td><td>A</td></tr><tr><td>BIS</td><td>A</td></tr><tr><td>BNE</td><td>A</td></tr><tr><td>BOM</td><td>A</td></tr><tr><td>CCT</td><td>A</td></tr><tr><td>CE</td><td>A</td></tr><tr><td>CLN</td><td>A</td></tr><tr><td>CMI</td><td>A</td></tr><tr><td>CN</td><td>A</td></tr><tr><td>CRP</td><td>A</td></tr><tr><td>CS</td><td>A</td></tr><tr><td>CSC</td><td>A</td></tr><tr><td>CSD</td><td>A</td></tr><tr><td>CSE</td><td>A</td></tr><tr><td>CSF</td><td>A</td></tr><tr><td>CSI</td><td>A</td></tr><tr><td>CSL</td><td>A</td></tr><tr><td>CSM</td><td>A</td></tr><tr><td>CSP</td><td>A</td></tr><tr><td>CSR</td><td>A</td></tr><tr><td>CTXSYS</td><td>X</td></tr><tr><td>CUA</td><td>A</td></tr><tr><td>CUG</td><td>A</td></tr><tr><td>CZ</td><td>A</td></tr><tr><td>DDR</td><td>A</td></tr><tr><td>DMS</td><td>A</td></tr><tr><td>DNA</td><td>A</td></tr><tr><td>DO-NOT-DELETE-ME</td><td></td></tr><tr><td>DOM</td><td>A</td></tr><tr><td>DPP</td><td>A</td></tr><tr><td>EAM</td><td>A</td></tr><tr><td>EBS_SYSTEM</td><td>S</td></tr><tr><td>EC</td><td>A</td></tr><tr><td>ECX</td><td>A</td></tr><tr><td>EDR</td><td>A</td></tr><tr><td>EGO</td><td>A</td></tr><tr><td>ENG</td><td>A</td></tr><tr><td>ENI</td><td>A</td></tr><tr><td>FA</td><td>A</td></tr><tr><td>FLM</td><td>A</td></tr><tr><td>FPA</td><td>A</td></tr><tr><td>FRM</td><td>A</td></tr><tr><td>FTE</td><td>A</td></tr><tr><td>FUN</td><td>A</td></tr><tr><td>FV</td><td>A</td></tr><tr><td>GHG</td><td>A</td></tr><tr><td>GL</td><td>A</td></tr><tr><td>GMA</td><td>A</td></tr><tr><td>GMD</td><td>A</td></tr><tr><td>GME</td><td>A</td></tr><tr><td>GMF</td><td>A</td></tr><tr><td>GMI</td><td>A</td></tr><tr><td>GML</td><td>A</td></tr><tr><td>GMO</td><td>A</td></tr><tr><td>GMP</td><td>A</td></tr><tr><td>GMS</td><td>A</td></tr><tr><td>GR</td><td>A</td></tr><tr><td>HR</td><td>A</td></tr><tr><td>HRI</td><td>A</td></tr><tr><td>HXC</td><td>A</td></tr><tr><td>HXT</td><td>A</td></tr><tr><td>IA</td><td>A</td></tr><tr><td>IBC</td><td>A</td></tr><tr><td>IBE</td><td>A</td></tr><tr><td>IBU</td><td>A</td></tr><tr><td>IBW</td><td>A</td></tr><tr><td>IBY</td><td>A</td></tr><tr><td>ICX</td><td>A</td></tr><tr><td>IEB</td><td>A</td></tr><tr><td>IEC</td><td>A</td></tr><tr><td>IEM</td><td>A</td></tr><tr><td>IEO</td><td>A</td></tr><tr><td>IES</td><td>A</td></tr><tr><td>IEU</td><td>A</td></tr><tr><td>IEX</td><td>A</td></tr><tr><td>IGC</td><td>A</td></tr><tr><td>IGI</td><td>A</td></tr><tr><td>IMC</td><td>A</td></tr><tr><td>INL</td><td>A</td></tr><tr><td>INV</td><td>A</td></tr><tr><td>IPA</td><td>A</td></tr><tr><td>IPM</td><td>A</td></tr><tr><td>ITG</td><td>A</td></tr><tr><td>IZU</td><td>A</td></tr><tr><td>JA</td><td>A</td></tr><tr><td>JG</td><td>A</td></tr><tr><td>JL</td><td>A</td></tr><tr><td>JMF</td><td>A</td></tr><tr><td>JTF</td><td>A</td></tr><tr><td>JTI</td><td>A</td></tr><tr><td>JTM</td><td>A</td></tr><tr><td>JTR</td><td>A</td></tr><tr><td>LNS</td><td>A</td></tr><tr><td>MFG</td><td>A</td></tr><tr><td>MRP</td><td>A</td></tr><tr><td>MSC</td><td>A</td></tr><tr><td>MSD</td><td>A</td></tr><tr><td>MSO</td><td>A</td></tr><tr><td>MSR</td><td>A</td></tr><tr><td>MTH</td><td>A</td></tr><tr><td>MTR</td><td>X</td></tr><tr><td>MWA</td><td>A</td></tr><tr><td>ODM</td><td>X</td></tr><tr><td>OE</td><td>A</td></tr><tr><td>OKC</td><td>A</td></tr><tr><td>OKE</td><td>A</td></tr><tr><td>OKL</td><td>A</td></tr><tr><td>OKS</td><td>A</td></tr><tr><td>OKX</td><td>A</td></tr><tr><td>ONT</td><td>A</td></tr><tr><td>OPI</td><td>A</td></tr><tr><td>OSM</td><td>A</td></tr><tr><td>OTA</td><td>A</td></tr><tr><td>OZF</td><td>A</td></tr><tr><td>PA</td><td>A</td></tr><tr><td>PJI</td><td>A</td></tr><tr><td>PJM</td><td>A</td></tr><tr><td>PMI</td><td>A</td></tr><tr><td>PN</td><td>A</td></tr><tr><td>PO</td><td>A</td></tr><tr><td>POM</td><td>A</td></tr><tr><td>PON</td><td>A</td></tr><tr><td>POS</td><td>A</td></tr><tr><td>PRP</td><td>A</td></tr><tr><td>PSA</td><td>A</td></tr><tr><td>PSP</td><td>A</td></tr><tr><td>PV</td><td>A</td></tr><tr><td>QA</td><td>A</td></tr><tr><td>QOT</td><td>A</td></tr><tr><td>QP</td><td>A</td></tr><tr><td>QPR</td><td>A</td></tr><tr><td>QRM</td><td>A</td></tr><tr><td>RG</td><td>A</td></tr><tr><td>RLM</td><td>A</td></tr><tr><td>RRS</td><td>A</td></tr><tr><td>SSP</td><td>A</td></tr><tr><td>VEA</td><td>A</td></tr><tr><td>WH</td><td>A</td></tr><tr><td>WIP</td><td>A</td></tr><tr><td>WMS</td><td>A</td></tr><tr><td>WPS</td><td>A</td></tr><tr><td>WSH</td><td>A</td></tr><tr><td>WSM</td><td>A</td></tr><tr><td>XDO</td><td>A</td></tr><tr><td>XDP</td><td>A</td></tr><tr><td>XLA</td><td>A</td></tr><tr><td>XLE</td><td>A</td></tr><tr><td>XNB</td><td>A</td></tr><tr><td>XNP</td><td>A</td></tr><tr><td>XTR</td><td>A</td></tr><tr><td>XX_NLQ</td><td>K</td></tr><tr><td>YMS</td><td>A</td></tr><tr><td>ZX</td><td>A</td></tr></tbody></table>
             
             <h3>Recently Applied Patches (Last 180 Days)</h3>
