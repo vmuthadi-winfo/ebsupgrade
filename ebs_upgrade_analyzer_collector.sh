@@ -185,49 +185,83 @@ where node_name <> 'AUTHENTICATION';
 prompt [SECTION_END:EBS_NODES]
 
 prompt [SECTION_START:CTX_DIRECTORIES]
--- Context directory paths from ad_appl_tops and profile options
-select node_name ||'|appl_top|'|| appl_top_name
-from apps.ad_appl_tops where active_flag = 'Y' and rownum <= 20
+select node_name ||'|appl_top|'|| EXTRACTVALUE(XMLType(TEXT),'//APPL_TOP')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
 union all
-select 'SYSTEM' ||'|appl_top|'|| fv.profile_option_value
-from apps.fnd_profile_option_values fv, apps.fnd_profile_options fo
-where fo.profile_option_id = fv.profile_option_id and fo.profile_option_name = 'APPS_FRAMEWORK_AGENT' and fv.level_id = 10001 and rownum = 1;
+select node_name ||'|common_top|'|| EXTRACTVALUE(XMLType(TEXT),'//COMMON_TOP')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+union all
+select node_name ||'|instance_top|'|| EXTRACTVALUE(XMLType(TEXT),'//INST_TOP')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
 prompt [SECTION_END:CTX_DIRECTORIES]
 
 prompt [SECTION_START:CTX_PORTS_SECURITY]
--- Port and security configuration from profile options
-select 'SYSTEM' ||'|webport|'|| substr(fv.profile_option_value, instr(fv.profile_option_value, ':', -1) + 1)
-from apps.fnd_profile_option_values fv, apps.fnd_profile_options fo
-where fo.profile_option_id = fv.profile_option_id and fo.profile_option_name = 'APPS_FRAMEWORK_AGENT' and fv.level_id = 10001 and rownum = 1
+select node_name ||'|port_pool|'|| EXTRACTVALUE(XMLType(TEXT),'//s_port_pool')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
 union all
-select 'SYSTEM' ||'|framework_agent|'|| fv.profile_option_value
-from apps.fnd_profile_option_values fv, apps.fnd_profile_options fo
-where fo.profile_option_id = fv.profile_option_id and fo.profile_option_name = 'APPS_FRAMEWORK_AGENT' and fv.level_id = 10001 and rownum = 1
+select node_name ||'|webport|'|| EXTRACTVALUE(XMLType(TEXT),'//s_webport')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
 union all
-select 'SYSTEM' ||'|servlet_agent|'|| fv.profile_option_value
-from apps.fnd_profile_option_values fv, apps.fnd_profile_options fo
-where fo.profile_option_id = fv.profile_option_id and fo.profile_option_name = 'APPS_SERVLET_AGENT' and fv.level_id = 10001 and rownum = 1;
+select node_name ||'|webssl_port|'|| EXTRACTVALUE(XMLType(TEXT),'//s_webssl_port')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
 prompt [SECTION_END:CTX_PORTS_SECURITY]
 
 prompt [SECTION_START:CTX_DB_NETWORKING]
--- Database networking info from v$instance and v$database
-select 'SYSTEM' ||'|db_name|'|| name from v$database
+select node_name ||'|db_name|'|| EXTRACTVALUE(XMLType(TEXT),'//s_dbSid')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
 union all
-select 'SYSTEM' ||'|db_host|'|| host_name from v$instance
+select node_name ||'|db_host|'|| EXTRACTVALUE(XMLType(TEXT),'//s_dbhost')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
 union all
-select 'SYSTEM' ||'|db_port|'|| nvl((select value from v$parameter where name = 'local_listener'), 'DEFAULT_1521') from dual;
+select node_name ||'|db_port|'|| EXTRACTVALUE(XMLType(TEXT),'//s_dbport')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
 prompt [SECTION_END:CTX_DB_NETWORKING]
 
 prompt [SECTION_START:CTX_JVM_SERVICES]
--- JVM service configuration from concurrent queue targets
-select 'OACORE' ||'|oacore_nprocs|'|| target_processes
-from apps.fnd_concurrent_queues where concurrent_queue_name = 'OACORE' and rownum = 1
+select node_name ||'|oacore_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'//s_oacore_nprocs')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
 union all
-select 'FORMS' ||'|forms_nprocs|'|| target_processes
-from apps.fnd_concurrent_queues where concurrent_queue_name = 'FORMS' and rownum = 1
+select node_name ||'|forms_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'//s_forms_nprocs')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
 union all
-select 'OAFM' ||'|oafm_nprocs|'|| target_processes
-from apps.fnd_concurrent_queues where concurrent_queue_name = 'OAFM' and rownum = 1;
+select node_name ||'|oafm_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'//s_oafm_nprocs')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
 prompt [SECTION_END:CTX_JVM_SERVICES]
 
 prompt [SECTION_START:EBS_INTEGRATIONS_PROFILES]
