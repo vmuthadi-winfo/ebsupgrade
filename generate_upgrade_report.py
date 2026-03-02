@@ -298,44 +298,234 @@ def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size, dat
 
     return challenges
 
-def build_roadmap():
-    return """
+def build_roadmap(ebs_version, db_version, is_rac, has_dataguard):
+    """Build dynamic upgrade roadmap based on source environment."""
+    
+    # Determine source state
+    is_ebs_1213 = '12.1' in str(ebs_version) or '1213' in str(ebs_version).replace('.', '')
+    is_ebs_1220 = '12.2.0' in str(ebs_version)
+    is_db_11g = '11' in str(db_version)
+    is_db_12c = '12' in str(db_version)
+    
+    # Build complexity indicators
+    complexity_factors = []
+    if is_ebs_1213:
+        complexity_factors.append("EBS 12.1.3 → 12.2 upgrade (Major architectural change)")
+    if is_db_11g:
+        complexity_factors.append("Database 11g → 19c upgrade (2 major version jumps)")
+    if is_rac:
+        complexity_factors.append("RAC cluster coordination required")
+    if has_dataguard:
+        complexity_factors.append("Data Guard standby recreation needed")
+    
+    complexity_html = ""
+    if complexity_factors:
+        complexity_html = """
+        <div style="background:#FEF3C7; border-left:4px solid #F59E0B; padding:15px; margin-bottom:20px; border-radius:6px;">
+            <strong style="color:#92400E;">⚠️ Complexity Factors Identified:</strong>
+            <ul style="margin:10px 0 0 20px; color:#92400E;">
+        """
+        for factor in complexity_factors:
+            complexity_html += f"<li>{factor}</li>"
+        complexity_html += "</ul></div>"
+    
+    # RAC-specific considerations
+    rac_html = ""
+    if is_rac:
+        rac_html = """
+        <div style="background:#E0F2FE; border-left:4px solid #0284C7; padding:15px; margin:20px 0; border-radius:6px;">
+            <strong style="color:#0369A1;">🔄 RAC Cluster Considerations:</strong>
+            <ul style="margin:10px 0 0 20px; color:#0369A1;">
+                <li>All RAC instances must be shut down during database upgrade</li>
+                <li>ASM disk groups require validation post-upgrade</li>
+                <li>OCR/Voting disks backup recommended before upgrade</li>
+                <li>Grid Infrastructure upgrade may be required (19c GI for 19c RAC)</li>
+                <li>SCAN listeners must be reconfigured for new cluster</li>
+                <li>Recommend upgrading to RAC with 19c RU latest patch</li>
+            </ul>
+        </div>
+        """
+    
+    # Data Guard considerations
+    dg_html = ""
+    if has_dataguard:
+        dg_html = """
+        <div style="background:#F0FDF4; border-left:4px solid #22C55E; padding:15px; margin:20px 0; border-radius:6px;">
+            <strong style="color:#166534;">🛡️ Data Guard Standby Considerations:</strong>
+            <ul style="margin:10px 0 0 20px; color:#166534;">
+                <li>Standby database must be recreated after primary upgrade</li>
+                <li>Physical standby: Use RMAN duplicate or restore from backup</li>
+                <li>Logical standby: Requires complete rebuild from upgraded primary</li>
+                <li>Data Guard Broker configuration needs reconfiguration</li>
+                <li>Consider temporary DR gap during cutover weekend</li>
+                <li>Fast-Start Failover should be disabled during upgrade</li>
+            </ul>
+        </div>
+        """
+    
+    return f"""
+    {complexity_html}
+    
+    <h3>Upgrade Approach Overview</h3>
+    <p style="font-size:14px; color:#475569;">The following phased approach addresses the transition from your current environment to the target Oracle EBS 12.2.15 on Database 19c architecture.</p>
+    
     <div class="roadmap-timeline">
         <div class="rm-step">
             <div class="rm-badge">Ph 1</div>
             <div>
-                <strong>Infrastructure & Technical Stack </strong><br>
-                Deploy Oracle Linux 9 / RHEL 9. Install Oracle Database 19c (19.x) binary in Multitenant architecture (CDB).
+                <strong>Infrastructure & Technical Stack</strong><br>
+                Deploy Oracle Linux 8/9 (RHEL 8/9). Install Oracle Database 19c binary in Multitenant architecture (CDB). 
+                {'<span style="color:#DC2626;">(Current DB 11g requires direct to 19c upgrade path)</span>' if is_db_11g else ''}
             </div>
         </div>
         <div class="rm-step">
             <div class="rm-badge">Ph 2</div>
             <div>
                 <strong>Database Upgrade & Migration</strong><br>
-                Migrate the EBS Database into the 19c PDB. Convert <code>UTL_FILE_DIR</code> logic. Migrate character sets to AL32UTF8 (if needed).
+                {'Upgrade from 11g to 19c using AutoUpgrade or DBUA. ' if is_db_11g else 'Upgrade from 12c to 19c using AutoUpgrade. '}
+                Migrate into 19c PDB. Convert <code>UTL_FILE_DIR</code> to Oracle Directories. Migrate character sets to AL32UTF8 (if needed).
             </div>
         </div>
         <div class="rm-step">
             <div class="rm-badge">Ph 3</div>
             <div>
-                <strong>Application Upgrade (12.2.0 Base)</strong><br>
-                Rapid Install the 12.2 File System via DB upgrade mode. This lays down the dual-file system and Weblogic Server (WLS 10.3.6). Enable Online Patching (EBR).
+                <strong>Application Upgrade {'(12.1.3 → 12.2.0 Base)' if is_ebs_1213 else '(12.2.0 Base)'}</strong><br>
+                {'Major version upgrade from 12.1.3 to 12.2.0 using AD leveling scripts. ' if is_ebs_1213 else ''}
+                Rapid Install the 12.2 File System via DB upgrade mode. Deploy dual-file system and WebLogic Server (WLS 10.3.6). Enable Online Patching (EBR).
             </div>
         </div>
         <div class="rm-step">
             <div class="rm-badge">Ph 4</div>
             <div>
                 <strong>CEMLI Remediation (Customizations)</strong><br>
-                Apply Online Patching logical columns to all custom tables. Re-compile Java/C executables natively on Linux 9. Remediate custom PL/SQL to Edition-based standards.
+                Apply Online Patching logical columns to all custom tables. Re-compile Java/C executables natively on target OS. Remediate custom PL/SQL to Edition-based standards. Validate all custom objects.
             </div>
         </div>
         <div class="rm-step">
             <div class="rm-badge">Ph 5</div>
             <div>
                 <strong>Continuous Innovation (12.2.14 / 12.2.15)</strong><br>
-                Apply the latest AD/TXK Delta packs in the run edition. Apply the 12.2.15 Release Update Pack (RUP). Re-integrate SSO, OAC, and ISG endpoints.
+                Apply the latest AD/TXK Delta packs in the run edition. Apply the 12.2.15 Release Update Pack (RUP). Re-integrate SSO, OAC, and ISG endpoints. Validate all integrations.
             </div>
         </div>
+    </div>
+    
+    {rac_html}
+    {dg_html}
+    
+    <h3>High-Level 15-Step Upgrade Activity Summary</h3>
+    <p style="font-size:13px; color:#475569;">The following activities represent the critical path for completing a successful EBS upgrade project:</p>
+    
+    <table style="font-size:13px;">
+        <thead>
+            <tr>
+                <th style="width:50px;">Step</th>
+                <th style="width:150px;">Phase</th>
+                <th>Activity Description</th>
+                <th style="width:100px;">Duration Est.</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">1</td>
+                <td>Planning</td>
+                <td><strong>Discovery & Assessment</strong> - Complete CEMLI inventory, identify customizations, integrations, and technical dependencies</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">2</td>
+                <td>Planning</td>
+                <td><strong>Environment Sizing</strong> - Define target infrastructure requirements for OL8/9, 19c DB, WLS, and storage needs</td>
+                <td>1 week</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">3</td>
+                <td>Infrastructure</td>
+                <td><strong>Target Environment Build</strong> - Provision new servers with Oracle Linux 8/9, configure network, storage, and prerequisites</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">4</td>
+                <td>Infrastructure</td>
+                <td><strong>Database Software Installation</strong> - Install Oracle Database 19c software, create CDB container database{'<br><span style="color:#DC2626;">+ Grid Infrastructure for RAC</span>' if is_rac else ''}</td>
+                <td>1 week</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">5</td>
+                <td>Database</td>
+                <td><strong>Database Upgrade/Migration</strong> - Upgrade {'11g' if is_db_11g else '12c'} database to 19c using AutoUpgrade, plug into CDB as PDB</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">6</td>
+                <td>Database</td>
+                <td><strong>Database Post-Upgrade Tasks</strong> - Apply latest 19c RU patch, validate parameters, configure TDE (if required), test connectivity</td>
+                <td>3-5 days</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">7</td>
+                <td>Application</td>
+                <td><strong>EBS 12.2 Rapid Install</strong> - Install EBS 12.2 application tier file system, configure WebLogic domain, enable dual-filesystem</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">8</td>
+                <td>Application</td>
+                <td><strong>Online Patching Enablement</strong> - Enable EBR (Edition-Based Redefinition), configure ADOP, validate patching cycle</td>
+                <td>3-5 days</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">9</td>
+                <td>Application</td>
+                <td><strong>Apply Release Update Pack</strong> - Apply AD/TXK Delta packs and 12.2.14/12.2.15 RUP using ADOP patching</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">10</td>
+                <td>CEMLI</td>
+                <td><strong>Custom Schema Registration</strong> - Register all custom schemas with AD_ZD, apply EBR enablement to custom tables</td>
+                <td>1 week</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">11</td>
+                <td>CEMLI</td>
+                <td><strong>Custom Code Remediation</strong> - Recompile Forms/Reports, remediate PL/SQL for EBR, rebuild Java/OAF components on new JDK</td>
+                <td>2-4 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">12</td>
+                <td>Integration</td>
+                <td><strong>Integration Re-Configuration</strong> - Reconfigure SSO, ISG, APEX, ECC, and third-party integrations on new WLS tier</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">13</td>
+                <td>Testing</td>
+                <td><strong>Functional Testing</strong> - Execute business process testing across all modules, validate reports and outputs</td>
+                <td>2-4 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">14</td>
+                <td>Testing</td>
+                <td><strong>Performance Testing</strong> - Load testing, concurrent processing validation, Forms/UI response times{'<br><span style="color:#0284C7;">+ RAC workload balancing</span>' if is_rac else ''}</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">15</td>
+                <td>Cutover</td>
+                <td><strong>Production Cutover</strong> - Final data sync, cutover execution, go-live validation, hypercare support{'<br><span style="color:#22C55E;">+ Data Guard standby rebuild</span>' if has_dataguard else ''}</td>
+                <td>1 weekend</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div style="background:#F1F5F9; border-radius:8px; padding:20px; margin-top:20px;">
+        <h4 style="margin-top:0; color:#0F172A;">📊 Estimated Total Project Duration</h4>
+        <p style="margin:0; font-size:14px;">
+            <strong>Typical Range:</strong> 4-6 months (depending on CEMLI complexity and integration scope)<br>
+            <strong>Mock Cycles:</strong> 2-3 full upgrade rehearsals recommended before production cutover<br>
+            <strong>Cutover Window:</strong> 48-72 hours recommended for production migration
+        </p>
     </div>
     """
 
@@ -648,6 +838,7 @@ def build_html(data):
     
     # Process New Advanced Extractions
     db_dataguard = safe_get(data, 'DB_DATAGUARD', [])
+    has_dataguard = len(db_dataguard) > 0 and db_dataguard[0][0] != 'N/A'
     db_backups = safe_get(data, 'DB_BACKUP_SUMMARY', [])
     top_10_tables = safe_get(data, 'TOP_10_TABLES', [])
     user_profiles = safe_get(data, 'DB_USER_PROFILES', [])
@@ -958,8 +1149,8 @@ def build_html(data):
             <div class="section-header">
                 <h2>Target State Upgrade Roadmap</h2>
             </div>
-            <p>A structured approach is required transitioning your <code>{ebs_version}</code> architecture. The typical critical path for a full DB and App tier replacement on Oracle Linux 9 involves 5 logical sequences.</p>
-            {build_roadmap()}
+            <p>A structured approach is required transitioning your <code>{ebs_version}</code> architecture (Database {db_version_info[1] if len(db_version_info)>1 else 'Unknown'}). The typical critical path for a full DB and App tier replacement on Oracle Linux 8/9 involves multiple phases.</p>
+            {build_roadmap(ebs_version, db_version_info[1] if len(db_version_info)>1 else '', is_rac, has_dataguard)}
         </div>
 
         <div id="cemli" class="section">
