@@ -21,7 +21,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Stage Collector Script to DB Node
         env:
@@ -56,7 +56,7 @@ jobs:
           scp -o StrictHostKeyChecking=no $SSH_USER@$DB_SERVER:/tmp/ebs_upgrade_analyzer_data_*.txt ./db_node_data.txt
           
       - name: Upload DB Data Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: db-node-raw-data
           path: ./db_node_data.txt
@@ -66,7 +66,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Stage Collector Script to App Node
         env:
@@ -105,7 +105,7 @@ jobs:
           scp -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER:/tmp/ebs_upgrade_analyzer_data_*.txt ./app_node_data.txt
           
       - name: Upload App Data Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: app-node-raw-data
           path: ./app_node_data.txt
@@ -116,21 +116,21 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Download DB Data
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: db-node-raw-data
           path: ./data/
 
       - name: Download App Data
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: app-node-raw-data
           path: ./data/
@@ -150,7 +150,7 @@ jobs:
           python generate_upgrade_report.py consolidated_ebs_data.txt
 
       - name: Upload Final HTML Dashboard
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: EBS-Upgrade-Impact-Report-${{ github.event.inputs.env_tier }}
           path: EBS_Upgrade_Impact_Analysis_*.html

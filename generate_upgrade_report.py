@@ -24,6 +24,38 @@ def safe_get(data, section, default_row=None):
     val = data.get(section, [])
     return val if val else default_row
 
+def safe_float(value, default=0.0):
+    """Safely convert a value to float, extracting digits if needed"""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        # Extract numeric portion from string like "DB_SIZE|12500"
+        digits = ''.join(c for c in str(value) if c.isdigit() or c == '.')
+        if digits:
+            try:
+                return float(digits)
+            except (ValueError, TypeError):
+                pass
+        return default
+
+def safe_int(value, default=0):
+    """Safely convert a value to int, extracting digits if needed"""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        # Extract numeric portion
+        digits = ''.join(c for c in str(value) if c.isdigit())
+        if digits:
+            try:
+                return int(digits)
+            except (ValueError, TypeError):
+                pass
+        return default
+
 def render_table(rows, headers):
     if not rows:
         return "<p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>"
@@ -64,10 +96,10 @@ def determine_integrations(profiles):
         if 'APEX' in name:
             integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}. Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
         if 'ECC' in name:
-            integ['ECC'] = {'status': 'Active', 'desc': f'Command Center profiles found.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
-        if 'SOA' in name:
-            integ['SOA_ISG'] = {'status': 'Active', 'desc': 'SOA/ISG detected. Integrated SOA Gateway has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
-        if 'OBIEE' in name:
+            integ['ECC'] = {'status': 'Active', 'desc': 'Command Center profiles found.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
+        if 'SOA' in name or 'REST' in name or 'ISG' in name:
+            integ['SOA_ISG'] = {'status': 'Active', 'desc': 'SOA/ISG/REST detected. Integrated SOA Gateway has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
+        if 'OBIEE' in name or 'OAC' in name:
             integ['OBIEE'] = {'status': 'Active', 'desc': 'OBIEE / OAC URL Profiles defined.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
         if 'ENDECA' in name:
             integ['ENDECA'] = {'status': 'Active', 'desc': 'Endeca extensions detected.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
@@ -84,6 +116,7 @@ def determine_integrations(profiles):
         if 'SSO' in name or 'OAM' in name:
             integ['SSO'] = {'status': 'Active', 'desc': 'SSO/OAM configurations detected.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
             
+    # Check if agents differ indicating external SSO
     if auth_agent and fwk_agent and auth_agent != fwk_agent:
          integ['SSO'] = {'status': 'Active', 'desc': 'Potential SSO / Access Gate detected via disjointed Auth & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
 
@@ -105,10 +138,26 @@ def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size, dat
          challenges.append("<b>UTL_FILE_DIR Desupported</b>: Oracle Database 19c totally desupports this initialization parameter. All custom PL/SQL utilizing this must be refactored to use standard Database Directory objects managed by the APPS schema (via `txkCreateDirObject.sql`).")
 
     # DB Links and Invalid Objects
-    db_links = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
-    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
-    if int(invalid_objs) > 100:
-        challenges.append(f"<b>Database Hygiene</b>: The source database has {invalid_objs} invalid objects. The 12.2 Edition-based Redefinition pre-reqs demand a clean compilation state before enablement.")
+    db_links = 0
+    for row in safe_get(data, 'DBA_DB_LINKS', []):
+        if row and row[0]:
+            try:
+                db_links += int(row[0])
+            except (ValueError, TypeError):
+                pass
+                
+    invalid_objs_raw = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0]
+    # Use safe_int which handles formats like "42" or "INVALID_OBJECTS_COUNT" (extracts digits)
+    invalid_objs_num = 0
+    for val in invalid_objs_raw:
+        num = safe_int(val, 0)
+        if num > 0:
+            invalid_objs_num = num
+            break
+    
+    if invalid_objs_num > 100:
+        challenges.append(f"<b>Database Hygiene</b>: The source database has {invalid_objs_num} invalid objects. The 12.2 Edition-based Redefinition pre-reqs demand a clean compilation state before enablement.")
+        
     if db_links > 15:
         challenges.append(f"<b>Integration Sprawl</b>: Detected {db_links} active Database Links. High integration coupling will drastically extend testing cycles during the Multitenant database platform migration.")
 
@@ -119,9 +168,10 @@ def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size, dat
     # Character Set
     challenges.append("<b>AL32UTF8 Mandate</b>: If the Database is not already AL32UTF8, the EBS 12.2 upgrade highly recommends transitioning to Unicode to support modern middle-tier functionality.")
 
-    # Memory Size
-    if float(db_size) > 2000:
-        challenges.append(f"<b>Downtime Constraints</b>: The database is quite large ({db_size} GB). Depending on OS-endianness, the migration/upgrade of the Database file structures might breach typical weekend downtime cutovers without utilizing specialized Data Guard or Oracle GoldenGate syncs.")
+    # Memory Size - use safe_float helper
+    db_size_num = safe_float(db_size)
+    if db_size_num > 2000:
+        challenges.append(f"<b>Downtime Constraints</b>: The database is quite large ({db_size_num} GB). Depending on OS-endianness, the migration/upgrade of the Database file structures might breach typical weekend downtime cutovers without utilizing specialized Data Guard or Oracle GoldenGate syncs.")
 
     return challenges
 
@@ -178,12 +228,12 @@ def calculate_complexity_score(data, db_params, active_users, custom_objs, custo
     db_version_info = safe_get(data, 'DB_VERSION', [['Unknown', '12', 'Unknown', 'Unknown']])[0]
     db_ver = db_version_info[1] if len(db_version_info) > 1 else '12'
     if '11' in db_ver or '12' in db_ver: cd2_score = 3
-    if float(db_size) > 1000: cd2_score += 2
+    if safe_float(db_size) > 1000: cd2_score += 2
     if cd2_score > 5: cd2_score = 5
 
     # CD-3: EBR Readiness
     cd3_score = 0
-    adzd_schemas = int(safe_get(data, 'ADOP_AD_ZD_SCHEMAS', [['0']])[0][0])
+    adzd_schemas = safe_int(safe_get(data, 'ADOP_AD_ZD_SCHEMAS', [['0']])[0][0])
     if custom_schemas_cnt > 10 and adzd_schemas == 0: cd3_score = 5
     elif custom_schemas_cnt > 0: cd3_score = 3
 
@@ -212,9 +262,7 @@ def calculate_complexity_score(data, db_params, active_users, custom_objs, custo
 
     # CD-7: Functional Blast Radius
     cd7_score = 0
-    users = 0
-    try: users = int(active_users)
-    except: pass
+    users = safe_int(active_users)
     if users > 1500: cd7_score = 5
     elif users > 400: cd7_score = 3
 
@@ -350,62 +398,54 @@ def generate_sizing_analytics(db_params, active_users, opp_data, forms_data):
             break
             
     # Calculate recommended Weblogic OAF Managed Servers (assume 1 server per 200 users, min 2)
-    try:
-        users = int(active_users)
-    except:
-        users = 500
+    users = safe_int(active_users, 500)
     wls_servers = max(users // 200, 2)
     if users < 100: wls_servers = 1
     
     # Calculate Custom Forms 
-    try:
-        forms_sessions = int(forms_data[0][0])
-    except:
-        forms_sessions = 50
+    forms_sessions = safe_int(forms_data[0][0] if forms_data else '50', 50)
     forms_servers = max(forms_sessions // 150, 1)
 
     # Calculate OPP
-    try:
-        opp_target = int(opp_data[0][0])
-    except:
-        opp_target = 1
+    opp_target = safe_int(opp_data[0][0] if opp_data else '1', 1)
     opp_memory = max(opp_target * 2, 2) # 2 GB per OPP JVM usually
     
     # Database Memory
     db_mem = 16 # Default GB
     for row in db_params:
-        if 'sga' in row[0].lower() and row[1].isdigit():
-            # If size in bytes, convert to GB
-            val = int(row[1])
-            if val > 1024*1024*1024:
-                db_mem = val // (1024*1024*1024)
-            else:
-                db_mem = val // 1024 # if in MB
-            break
+        if row and len(row) >= 2 and 'sga' in row[0].lower():
+            val = safe_int(row[1])
+            if val > 0:
+                if val > 1024*1024*1024:
+                    db_mem = val // (1024*1024*1024)
+                else:
+                    db_mem = val // 1024 # if in MB
+                break
 
     recom_mem = max(int(db_mem * 1.2), 16)
+    min_cores = max(cpu_count, 4)
     
     html = f"""
     <div class="grid-summary">
         <div class="metric-card" style="border-left-color: var(--primary-blue)">
             <div class="metric-title">Database Core Analytics</div>
-            <div class="metric-value">{{max(cpu_count, 4)}} Cores Minimum</div>
-            <div style="font-size:13px; color:#64748b;">Includes 19c buffer cache overhead. (Source: {{cpu_count}} CPU)</div>
+            <div class="metric-value">{min_cores} Cores Minimum</div>
+            <div style="font-size:13px; color:#64748b;">Includes 19c buffer cache overhead. (Source: {cpu_count} CPU)</div>
         </div>
         <div class="metric-card" style="border-left-color: var(--warning-amber)">
             <div class="metric-title">Database target Memory</div>
-            <div class="metric-value">{{recom_mem}} GB SGA/PGA</div>
+            <div class="metric-value">{recom_mem} GB SGA/PGA</div>
             <div style="font-size:13px; color:#64748b;">Target 20% growth over existing limits to support PDB dictionaries.</div>
         </div>
         <div class="metric-card" style="border-left-color: var(--success-green)">
             <div class="metric-title">EBS 12.2 OAF Load-Balancing</div>
-            <div class="metric-value">{{wls_servers}} WLS oacore JVMs</div>
-            <div style="font-size:13px; color:#64748b;">Based on {{users}} Active Users (2GB memory per instance)</div>
+            <div class="metric-value">{wls_servers} WLS oacore JVMs</div>
+            <div style="font-size:13px; color:#64748b;">Based on {users} Active Users (2GB memory per instance)</div>
         </div>
         <div class="metric-card" style="border-left-color: var(--primary-blue)">
-            <div class="metric-title">Forms & Output Processing</div>
-            <div class="metric-value">{{forms_servers}} Forms | {{opp_target}} OPP</div>
-            <div style="font-size:13px; color:#64748b;">Forms: {{forms_sessions}} Peak Sessions. OPP JVM Heap: {{opp_memory}}GB.</div>
+            <div class="metric-title">Forms &amp; Output Processing</div>
+            <div class="metric-value">{forms_servers} Forms | {opp_target} OPP</div>
+            <div style="font-size:13px; color:#64748b;">Forms: {forms_sessions} Peak Sessions. OPP JVM Heap: {opp_memory}GB.</div>
         </div>
     </div>
     """
@@ -482,6 +522,20 @@ def build_html(data):
     daily_conc_reqs = safe_get(data, 'DAILY_CONC_REQS_LAST_MONTH', [])
     users_created = safe_get(data, 'USERS_CREATED_MONTHLY', [])
     ebs_languages = safe_get(data, 'EBS_LANGUAGES', [])
+    
+    # CEMLI counts from extracted data
+    forms_data_raw = safe_get(data, 'CEMLI_FORMS_AND_PAGES', [])
+    forms_count = forms_data_raw[0][1] if forms_data_raw and len(forms_data_raw[0]) > 1 else '0'
+    
+    oaf_data_raw = safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', [])
+    oaf_count = oaf_data_raw[0][1] if oaf_data_raw and len(oaf_data_raw[0]) > 1 else '0'
+    
+    cemli_cp = safe_get(data, 'CEMLI_CONCURRENT_PROGRAMS', [])
+    
+    # Generate sizing analytics
+    opp_data = safe_get(data, 'OPP_SIZING', [])
+    forms_sessions_data = safe_get(data, 'FORMS_SESSIONS', [])
+    sizing_analytics = generate_sizing_analytics(db_params, active_users, opp_data, forms_sessions_data)
     
     # Calculate Complexity
     complexity_payload = calculate_complexity_score(data, db_params, active_users, custom_objs, custom_schemas, db_size, os_info, ebs_version, profiles)
@@ -808,6 +862,41 @@ def build_html(data):
     html += f"""
         </div>
 
+        <div id="database" class="section">
+            <div class="section-header">
+                <h2>Database Deep-Dive Analysis</h2>
+            </div>
+            <p>Comprehensive database analysis including character set, tablespace distribution, and database features usage.</p>
+            
+            <h3>Database Character Set & NLS Configuration</h3>
+            {render_table(safe_get(data, 'DB_CHARACTER_SET', []), ["NLS Parameter", "Current Value"])}
+            
+            <h3>Tablespace Distribution (GB)</h3>
+            {render_table(safe_get(data, 'DB_TABLESPACES', []), ["Tablespace Name", "Size (GB)", "Status"])}
+            
+            <h3>Redo Log Configuration</h3>
+            {render_table(safe_get(data, 'DB_REDO_LOGS', []), ["Group #", "Members", "Size (MB)", "Status"])}
+            
+            <h3>Archive Mode & Logging</h3>
+            {render_table(safe_get(data, 'DB_ARCHIVE_MODE', []), ["Log Mode", "Force Logging", "Supplemental Log"])}
+            
+            <h3>Database Features in Use</h3>
+            {render_table(safe_get(data, 'DB_FEATURES_USED', []), ["Feature Name", "Detected Usages", "Currently Used"])}
+            
+            <h3>Invalid Objects by Owner/Type</h3>
+            {render_table(safe_get(data, 'INVALID_OBJECTS_DETAIL', []), ["Schema Owner", "Object Type", "Count"])}
+            
+            <h3>AD Registered Schemas</h3>
+            <p style="font-size:13px; color:#475569;">Schemas registered with Oracle AD utilities. Custom schemas (XX*) must be registered for online patching compatibility.</p>
+            {render_table(safe_get(data, 'AD_REGISTERED_SCHEMAS', []), ["Schema Name", "Read Only"])}
+            
+            <h3>Recently Applied Patches (Last 180 Days)</h3>
+            {render_table(safe_get(data, 'AD_APPLIED_PATCHES_RECENT', []), ["Patch Name", "Patch Type", "Applied Date"])}
+            
+            <h3>Database Links Detail</h3>
+            {render_table(safe_get(data, 'DB_LINKS_DETAIL', []), ["Owner", "DB Link Name", "Host"])}
+        </div>
+
         <div id="workload" class="section">
             <div class="section-header">
                 <h2>Database Workloads, High Availability & Process Engineering</h2>
@@ -982,6 +1071,67 @@ def build_html(data):
                         <td><span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: {'#FEE2E2' if r['severity']=='Critical' else '#FEF3C7' if r['severity']=='High' else '#DBEAFE' if r['severity']=='Medium' else '#D1FAE5'}; color: {'#991B1B' if r['severity']=='Critical' else '#92400E' if r['severity']=='High' else '#1E40AF' if r['severity']=='Medium' else '#065F46'};">{{r['severity']}}</span></td>
                         <td>{{r['impact']}}</td>
                         <td>{{r['mitigation']}}</td>
+                    </tr>''' for r in risk_register)}
+                </tbody>
+            </table>
+            
+            <h3 style="margin-top: 30px;">Recommended Actions Before Upgrade</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 15px;">
+                <div style="background: #F0FDF4; border: 1px solid #86EFAC; padding: 15px; border-radius: 8px;">
+                    <b style="color: #166534;">✓ Pre-Upgrade Preparation</b>
+                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #166534; font-size: 14px;">
+                        <li>Run Oracle EBS Upgrade Analyzer (RUP)</li>
+                        <li>Run Database Upgrade Analyzer for 19c</li>
+                        <li>Generate ETCC compliance report</li>
+                        <li>Document all custom code inventory</li>
+                    </ul>
+                </div>
+                <div style="background: #FEF3C7; border: 1px solid #FCD34D; padding: 15px; border-radius: 8px;">
+                    <b style="color: #92400E;">⚠ Technical Remediation</b>
+                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400E; font-size: 14px;">
+                        <li>Resolve all invalid objects</li>
+                        <li>Enable edition-based custom schemas</li>
+                        <li>Convert UTL_FILE_DIR to directories</li>
+                        <li>Test all database links connectivity</li>
+                    </ul>
+                </div>
+                <div style="background: #DBEAFE; border: 1px solid #93C5FD; padding: 15px; border-radius: 8px;">
+                    <b style="color: #1E40AF;">📋 Planning & Governance</b>
+                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #1E40AF; font-size: 14px;">
+                        <li>Define cutover window requirements</li>
+                        <li>Plan minimum 3 rehearsal cycles</li>
+                        <li>Establish rollback procedures</li>
+                        <li>Coordinate with all integration teams</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="risks" class="section">
+            <div class="section-header">
+                <h2>Risk Register & Mitigation Plan</h2>
+            </div>
+            <p>Based on the automated analysis, the following risks have been identified that may impact the upgrade project timeline or success.</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Risk ID</th>
+                        <th>Category</th>
+                        <th>Risk Description</th>
+                        <th>Severity</th>
+                        <th>Business Impact</th>
+                        <th>Mitigation Strategy</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(f'''<tr>
+                        <td><b>{r['id']}</b></td>
+                        <td>{r['category']}</td>
+                        <td>{r['risk']}</td>
+                        <td><span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: {'#FEE2E2' if r['severity']=='Critical' else '#FEF3C7' if r['severity']=='High' else '#DBEAFE' if r['severity']=='Medium' else '#D1FAE5'}; color: {'#991B1B' if r['severity']=='Critical' else '#92400E' if r['severity']=='High' else '#1E40AF' if r['severity']=='Medium' else '#065F46'};">{r['severity']}</span></td>
+                        <td>{r['impact']}</td>
+                        <td>{r['mitigation']}</td>
                     </tr>''' for r in risk_register)}
                 </tbody>
             </table>
