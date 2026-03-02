@@ -24,38 +24,6 @@ def safe_get(data, section, default_row=None):
     val = data.get(section, [])
     return val if val else default_row
 
-def safe_float(value, default=0.0):
-    """Safely convert a value to float, extracting digits if needed"""
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except (ValueError, TypeError):
-        # Extract numeric portion from string like "DB_SIZE|12500"
-        digits = ''.join(c for c in str(value) if c.isdigit() or c == '.')
-        if digits:
-            try:
-                return float(digits)
-            except (ValueError, TypeError):
-                pass
-        return default
-
-def safe_int(value, default=0):
-    """Safely convert a value to int, extracting digits if needed"""
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        # Extract numeric portion
-        digits = ''.join(c for c in str(value) if c.isdigit())
-        if digits:
-            try:
-                return int(digits)
-            except (ValueError, TypeError):
-                pass
-        return default
-
 def render_table(rows, headers):
     if not rows:
         return "<p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>"
@@ -103,18 +71,8 @@ def determine_integrations(profiles):
             integ['OBIEE'] = {'status': 'Active', 'desc': 'OBIEE / OAC URL Profiles defined.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
         if 'ENDECA' in name:
             integ['ENDECA'] = {'status': 'Active', 'desc': 'Endeca extensions detected.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
-        if 'VERTEX' in name:
-            integ['VERTEX'] = {'status': 'Active', 'desc': 'Vertex Tax Integration.', 'color': '--danger-red', 'roadmap': 'Verify Vertex O series certification matrix for target OS and EBS 12.2.'}
-        if 'AVALARA' in name:
-            integ['AVALARA'] = {'status': 'Active', 'desc': 'Avalara Tax engine detected.', 'color': '--warning-amber', 'roadmap': 'Migration effort required for Avalara integration testing.'}
-        if 'KBACE' in name:
-            integ['KBACE'] = {'status': 'Active', 'desc': 'KBACE integration mapping found.', 'color': '--warning-amber', 'roadmap': 'Dependent on modern WebLogic OS architectural dependencies.'}
-        if 'MARKVIEW' in name:
-            integ['MARKVIEW'] = {'status': 'Active', 'desc': 'Kofax Markview imaging system.', 'color': '--warning-amber', 'roadmap': 'Highly invasive AP Integration. Exhaustive regression testing required on target WLS tier.'}
-        if 'GRC' in name:
-            integ['GRC'] = {'status': 'Active', 'desc': 'Oracle GRC (Governance Risk Compliance).', 'color': '--primary-blue', 'roadmap': 'Ensure AACG connectors map correctly against target OS versions.'}
-        if 'SSO' in name or 'OAM' in name:
-            integ['SSO'] = {'status': 'Active', 'desc': 'SSO/OAM configurations detected.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
+        if 'SSO' in name or 'OAM' in name or name == 'FND_SSO_COOKIE_DOMAIN' or name == 'APPS_SSO_PROFILE':
+            integ['SSO'] = {'status': 'Active', 'desc': 'SSO/OAM configurations detected.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 12.2.1.4+ on Weblogic 14c (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
             
     # Check if agents differ indicating external SSO
     if auth_agent and fwk_agent and auth_agent != fwk_agent:
@@ -122,7 +80,7 @@ def determine_integrations(profiles):
 
     return integ
 
-def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size, data):
+def run_prebuilt_rules(data, db_version, ebs_version, db_params, os_info, db_size):
     challenges = []
     
     # OS Check
@@ -138,26 +96,10 @@ def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size, dat
          challenges.append("<b>UTL_FILE_DIR Desupported</b>: Oracle Database 19c totally desupports this initialization parameter. All custom PL/SQL utilizing this must be refactored to use standard Database Directory objects managed by the APPS schema (via `txkCreateDirObject.sql`).")
 
     # DB Links and Invalid Objects
-    db_links = 0
-    for row in safe_get(data, 'DBA_DB_LINKS', []):
-        if row and row[0]:
-            try:
-                db_links += int(row[0])
-            except (ValueError, TypeError):
-                pass
-                
-    invalid_objs_raw = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0]
-    # Use safe_int which handles formats like "42" or "INVALID_OBJECTS_COUNT" (extracts digits)
-    invalid_objs_num = 0
-    for val in invalid_objs_raw:
-        num = safe_int(val, 0)
-        if num > 0:
-            invalid_objs_num = num
-            break
-    
-    if invalid_objs_num > 100:
-        challenges.append(f"<b>Database Hygiene</b>: The source database has {invalid_objs_num} invalid objects. The 12.2 Edition-based Redefinition pre-reqs demand a clean compilation state before enablement.")
-        
+    db_links = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
+    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
+    if int(invalid_objs) > 100:
+        challenges.append(f"<b>Database Hygiene</b>: The source database has {invalid_objs} invalid objects. The 12.2 Edition-based Redefinition pre-reqs demand a clean compilation state before enablement.")
     if db_links > 15:
         challenges.append(f"<b>Integration Sprawl</b>: Detected {db_links} active Database Links. High integration coupling will drastically extend testing cycles during the Multitenant database platform migration.")
 
@@ -168,10 +110,9 @@ def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size, dat
     # Character Set
     challenges.append("<b>AL32UTF8 Mandate</b>: If the Database is not already AL32UTF8, the EBS 12.2 upgrade highly recommends transitioning to Unicode to support modern middle-tier functionality.")
 
-    # Memory Size - use safe_float helper
-    db_size_num = safe_float(db_size)
-    if db_size_num > 2000:
-        challenges.append(f"<b>Downtime Constraints</b>: The database is quite large ({db_size_num} GB). Depending on OS-endianness, the migration/upgrade of the Database file structures might breach typical weekend downtime cutovers without utilizing specialized Data Guard or Oracle GoldenGate syncs.")
+    # Memory Size
+    if float(db_size) > 2000:
+        challenges.append(f"<b>Downtime Constraints</b>: The database is quite large ({db_size} GB). Depending on OS-endianness, the migration/upgrade of the Database file structures might breach typical weekend downtime cutovers without utilizing specialized Data Guard or Oracle GoldenGate syncs.")
 
     return challenges
 
@@ -228,12 +169,12 @@ def calculate_complexity_score(data, db_params, active_users, custom_objs, custo
     db_version_info = safe_get(data, 'DB_VERSION', [['Unknown', '12', 'Unknown', 'Unknown']])[0]
     db_ver = db_version_info[1] if len(db_version_info) > 1 else '12'
     if '11' in db_ver or '12' in db_ver: cd2_score = 3
-    if safe_float(db_size) > 1000: cd2_score += 2
+    if float(db_size) > 1000: cd2_score += 2
     if cd2_score > 5: cd2_score = 5
 
     # CD-3: EBR Readiness
     cd3_score = 0
-    adzd_schemas = safe_int(safe_get(data, 'ADOP_AD_ZD_SCHEMAS', [['0']])[0][0])
+    adzd_schemas = int(safe_get(data, 'ADOP_AD_ZD_SCHEMAS', [['0']])[0][0])
     if custom_schemas_cnt > 10 and adzd_schemas == 0: cd3_score = 5
     elif custom_schemas_cnt > 0: cd3_score = 3
 
@@ -262,7 +203,9 @@ def calculate_complexity_score(data, db_params, active_users, custom_objs, custo
 
     # CD-7: Functional Blast Radius
     cd7_score = 0
-    users = safe_int(active_users)
+    users = 0
+    try: users = int(active_users)
+    except: pass
     if users > 1500: cd7_score = 5
     elif users > 400: cd7_score = 3
 
@@ -365,12 +308,12 @@ def generate_risk_register(data, complexity_payload, os_info, db_version, custom
         risks.append({'id': 'R07', 'category': 'Integration', 'risk': 'External database dependencies identified', 'severity': 'Medium', 'impact': 'Medium', 'mitigation': 'Validate connectivity post-upgrade'})
     
     # Invalid Objects
-    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS_LIST', [])
+    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
     try:
-        if len(invalid_objs) > 500:
-            risks.append({'id': 'R08', 'category': 'Database', 'risk': f'{len(invalid_objs)} invalid objects require remediation', 'severity': 'High', 'impact': 'Medium', 'mitigation': 'Run utlrp.sql and resolve compilation errors'})
-        elif len(invalid_objs) > 100:
-            risks.append({'id': 'R09', 'category': 'Database', 'risk': f'{len(invalid_objs)} invalid objects detected', 'severity': 'Medium', 'impact': 'Low', 'mitigation': 'Review and compile before upgrade'})
+        if int(invalid_objs) > 500:
+            risks.append({'id': 'R08', 'category': 'Database', 'risk': f'{invalid_objs} invalid objects require remediation', 'severity': 'High', 'impact': 'Medium', 'mitigation': 'Run utlrp.sql and resolve compilation errors'})
+        elif int(invalid_objs) > 100:
+            risks.append({'id': 'R09', 'category': 'Database', 'risk': f'{invalid_objs} invalid objects detected', 'severity': 'Medium', 'impact': 'Low', 'mitigation': 'Review and compile before upgrade'})
     except (ValueError, TypeError):
         pass
     
@@ -398,29 +341,38 @@ def generate_sizing_analytics(db_params, active_users, opp_data, forms_data):
             break
             
     # Calculate recommended Weblogic OAF Managed Servers (assume 1 server per 200 users, min 2)
-    users = safe_int(active_users, 500)
+    try:
+        users = int(active_users)
+    except:
+        users = 500
     wls_servers = max(users // 200, 2)
     if users < 100: wls_servers = 1
     
     # Calculate Custom Forms 
-    forms_sessions = safe_int(forms_data[0][0] if forms_data else '50', 50)
+    try:
+        forms_sessions = int(forms_data[0][0])
+    except:
+        forms_sessions = 50
     forms_servers = max(forms_sessions // 150, 1)
 
     # Calculate OPP
-    opp_target = safe_int(opp_data[0][0] if opp_data else '1', 1)
+    try:
+        opp_target = int(opp_data[0][0])
+    except:
+        opp_target = 1
     opp_memory = max(opp_target * 2, 2) # 2 GB per OPP JVM usually
     
     # Database Memory
     db_mem = 16 # Default GB
     for row in db_params:
-        if row and len(row) >= 2 and 'sga' in row[0].lower():
-            val = safe_int(row[1])
-            if val > 0:
-                if val > 1024*1024*1024:
-                    db_mem = val // (1024*1024*1024)
-                else:
-                    db_mem = val // 1024 # if in MB
-                break
+        if 'sga' in row[0].lower() and row[1].isdigit():
+            # If size in bytes, convert to GB
+            val = int(row[1])
+            if val > 1024*1024*1024:
+                db_mem = val // (1024*1024*1024)
+            else:
+                db_mem = val // 1024 # if in MB
+            break
 
     recom_mem = max(int(db_mem * 1.2), 16)
     min_cores = max(cpu_count, 4)
@@ -458,7 +410,7 @@ def build_html(data):
     active_users = safe_get(data, 'EBS_ACTIVE_USERS', [['0']])[0][0]
     
     os_info = {row[0]: row[1] if len(row)>1 else '' for row in safe_get(data, 'OS_SERVER_INFO', [])}
-    all_nodes_context = safe_get(data, 'ALL_NODES_CONTEXT', [])
+    app_context = {row[0]: row[1] if len(row)>1 else '' for row in safe_get(data, 'APP_CONTEXT_INFO', [])}
     db_params = safe_get(data, 'DB_PARAMETERS', [])
     
     custom_schemas = len(safe_get(data, 'EBS_CUSTOM_SCHEMAS', []))
@@ -467,61 +419,12 @@ def build_html(data):
     nodes = safe_get(data, 'EBS_NODES', [])
     profiles = safe_get(data, 'EBS_INTEGRATIONS_PROFILES', [])
     integrations = determine_integrations(profiles)
-    rules_challenges = run_prebuilt_rules(db_version_info[1] if len(db_version_info)>1 else '', ebs_version, db_params, os_info, db_size, data)
+    rules_challenges = run_prebuilt_rules(data, db_version_info[1] if len(db_version_info)>1 else '', ebs_version, db_params, os_info, db_size)
     
     # Process New Extracts
-    invalid_objs_list = safe_get(data, 'DBA_INVALID_OBJECTS_LIST', [])
+    invalid_objs = safe_get(data, 'DBA_INVALID_OBJECTS', [['0']])[0][0]
     db_links = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
     directories = safe_get(data, 'DBA_DIRECTORIES', [['0']])[0][0]
-
-    # Process CEMLI Details
-    cemli_cp = safe_get(data, 'CEMLI_CONCURRENT_PROGRAMS', [])
-    forms_count = safe_get(data, 'CEMLI_FORMS_AND_PAGES', [['', '0']])[0][1]
-    oaf_count = safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', [['', '0']])[0][1]
-    oracle_alerts_list = safe_get(data, 'ORACLE_ALERTS_LIST', [])
-    
-    # Process Sizing Details
-    opp_data = safe_get(data, 'OPP_SIZING', [['1', '1']])
-    forms_data = safe_get(data, 'FORMS_SESSIONS', [['0']])
-    sizing_analytics = generate_sizing_analytics(db_params, active_users, opp_data, forms_data)
-    
-    # Process New Advanced Extractions
-    db_dataguard = safe_get(data, 'DB_DATAGUARD', [])
-    db_backups = safe_get(data, 'DB_BACKUP_SUMMARY', [])
-    top_10_tables = safe_get(data, 'TOP_10_TABLES', [])
-    user_profiles = safe_get(data, 'DB_USER_PROFILES', [])
-    role_privs = safe_get(data, 'DB_ROLE_PRIVS', [])
-    dmz_nodes = safe_get(data, 'EBS_DMZ_EXTERNAL_NODES', [])
-    pcp_managers = safe_get(data, 'EBS_PCP_MANAGERS', [])
-    func_volumes = safe_get(data, 'EBS_FUNC_DATA_VOLUMES', [])
-    
-    # Process Exhaustive Mailers & Security
-    workflow_mailer = safe_get(data, 'WORKFLOW_MAILER_DETAILED', [])
-    smtp_profiles = safe_get(data, 'FND_SMTP_PROFILES', [])
-    users_by_module = safe_get(data, 'ACTIVE_USERS_BY_MODULE', [])
-    users_by_resp = safe_get(data, 'ACTIVE_USERS_BY_RESP', [])
-    users_schema_connect = safe_get(data, 'EBS_USERS_SCHEMA_CONNECT', [])
-    scheduled_jobs = safe_get(data, 'SCHEDULED_CONCURRENT_JOBS', [])
-    db_init_params = safe_get(data, 'DB_INIT_PARAMS_FULL', [])
-    
-    # Process the 20+ New Deep-Dive Extractions
-    ad_txk_patch_level = safe_get(data, 'AD_TXK_PATCH_LEVEL', [])
-    recent_patches = safe_get(data, 'RECENT_PATCHES', [])
-    db_internal_state = safe_get(data, 'DB_INTERNAL_STATE', [])
-    db_feature_usage = safe_get(data, 'DB_FEATURE_USAGE', [])
-    custom_fnd_objects = safe_get(data, 'CUSTOM_FND_OBJECTS', [])
-    infra_objects = safe_get(data, 'INFRA_OBJECTS', [])
-    workload_statistics = safe_get(data, 'WORKLOAD_STATISTICS', [])
-    
-    db_usage_free = safe_get(data, 'DB_SIZE_USAGE_FREE', [['0', '0']])[0]
-    wf_admin_role = safe_get(data, 'WF_ADMIN_ROLE', [['SYSADMIN']])[0][0] if len(safe_get(data, 'WF_ADMIN_ROLE', [['SYSADMIN']])[0])>0 else 'SYSADMIN'
-    ebs_localizations = safe_get(data, 'EBS_LOCALIZATIONS', [])
-    top_50_execs = safe_get(data, 'TOP_50_CONC_PROGS_BY_EXEC', [])
-    top_50_time = safe_get(data, 'TOP_50_CONC_PROGS_BY_TIME', [])
-    conc_mgr_status = safe_get(data, 'CONC_MANAGER_QUEUE_STATUS', [])
-    daily_conc_reqs = safe_get(data, 'DAILY_CONC_REQS_LAST_MONTH', [])
-    users_created = safe_get(data, 'USERS_CREATED_MONTHLY', [])
-    ebs_languages = safe_get(data, 'EBS_LANGUAGES', [])
     
     # CEMLI counts from extracted data
     forms_data_raw = safe_get(data, 'CEMLI_FORMS_AND_PAGES', [])
@@ -637,12 +540,11 @@ def build_html(data):
         <a href="#topology">6. System Topology</a>
         <a href="#integrations">7. Enterprise Integrations</a>
         <a href="#database">8. Database Analysis</a>
-        <a href="#workload">9. Database Workloads / HA</a>
+        <a href="#workload">9. Database Workloads</a>
         <a href="#sizing">10. Target Sizing & Capacity</a>
         <a href="#techstack">11. App TechStack & Security</a>
         <a href="#workflow">12. Workflow & Mailer Footprint</a>
-        <a href="#functional">13. Functional Data Volumes</a>
-        <a href="#risks">14. Risk Register</a>
+        <a href="#risks">13. Risk Register</a>
     </div>
 
     <div class="main-content">
@@ -792,9 +694,36 @@ def build_html(data):
             <p style="color:red; font-size:13px; font-weight:600; margin-top:0;">&#9888; Action Required: All 'Java' and 'Spawned' (C/C++) executables must be recompiled on the target OS.</p>
             {render_table(cemli_cp, ["Execution Tech Stack", "Internal Engine", "Volumes Deployed"])}
             
-            <h3>Custom FND Configurations (Deep Dive)</h3>
-            <p style="font-size:13px; color:#475569;">Includes menus, functions, responsibilities, lookups, and flexfields prefixed with XX% for rigorous application security mapping.</p>
-            {render_table(custom_fnd_objects, ["FND Object Dimension", "Instance Volume"])}
+            <h3>Extended Customization Inventory</h3>
+            <div class="grid-summary" style="margin-top: 15px;">
+                <div class="metric-card">
+                    <div class="metric-title">Custom Responsibilities</div>
+                    <div class="metric-value">{safe_get(data, 'EBS_RESPONSIBILITIES', [['0', 'ACTIVE']])[0][0] if safe_get(data, 'EBS_RESPONSIBILITIES', []) else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Custom Menus</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_MENUS', [['CUSTOM_MENUS', '0']])[0][1] if safe_get(data, 'CUSTOM_MENUS', []) and len(safe_get(data, 'CUSTOM_MENUS', [])[0]) > 1 else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Custom Functions</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_FUNCTIONS', [['CUSTOM_FUNCTIONS', '0']])[0][1] if safe_get(data, 'CUSTOM_FUNCTIONS', []) and len(safe_get(data, 'CUSTOM_FUNCTIONS', [])[0]) > 1 else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Custom Lookups</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_LOOKUPS', [['CUSTOM_LOOKUPS', '0']])[0][1] if safe_get(data, 'CUSTOM_LOOKUPS', []) and len(safe_get(data, 'CUSTOM_LOOKUPS', [])[0]) > 1 else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Custom Value Sets</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_VALUE_SETS', [['CUSTOM_VALUE_SETS', '0']])[0][1] if safe_get(data, 'CUSTOM_VALUE_SETS', []) and len(safe_get(data, 'CUSTOM_VALUE_SETS', [])[0]) > 1 else '0'}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Descriptive Flexfields</div>
+                    <div class="metric-value">{safe_get(data, 'CUSTOM_DFF', [['DESCRIPTIVE_FLEXFIELDS', '0']])[0][1] if safe_get(data, 'CUSTOM_DFF', []) and len(safe_get(data, 'CUSTOM_DFF', [])[0]) > 1 else '0'}</div>
+                </div>
+            </div>
+            
+            <h3>Custom Database Objects by Schema</h3>
+            {render_table(safe_get(data, 'EBS_CUSTOM_OBJECTS', []), ["Schema Owner", "Object Type", "Object Count"])}
         </div>
 
         <div id="integrations" class="section">
@@ -827,15 +756,6 @@ def build_html(data):
             </div>
         </div>
 
-        <div id="database" class="section">
-            <div class="section-header">
-                <h2>Database Deep-Dive Architecture</h2>
-            </div>
-            <h3>Database Storage Allocations (GB)</h3>
-            <p style="font-size:13px; color:#475569;">Storage modeling constraints for Exadata or Cloud deployments.</p>
-            {render_table([['Allocated & Used', db_usage_free[0] + ' GB'], ['Free Available', db_usage_free[1] + ' GB']] if len(db_usage_free)>1 else [], ["Storage State", "Volume"])}
-        </div>
-
         <div id="topology" class="section">
             <div class="section-header">
                 <h2>Physical Topology & Contexts</h2>
@@ -844,20 +764,18 @@ def build_html(data):
             <h3>Application Node Definitions</h3>
             {render_table(nodes, ["Registrar Hostname", "Batch/Concurrent", "Forms Service", "Web Service", "Data Node", "Current State"])}
             
-            <h3>Global Applications Context Framework (Sourced from FND_OAM_CONTEXT_FILES)</h3>
+            <h3>Application Context Framework</h3>
             """
     
-    if len(all_nodes_context) > 0 and all_nodes_context[0][0] != 'N/A':
-        # Split Contexts into Topology mapping
-        topology_rows = []
-        for c in all_nodes_context:
-            if len(c) > 5:
-                entry = f"{c[1]}.{c[2]}" if c[1] and c[2] else c[1]
-                topology_rows.append([c[0], entry, c[3], c[4], c[5]])
-                
-        html += render_table(topology_rows, ["Node Name", "Web Entry Host", "Active Port", "Admin Server", "Shared APPL_TOP"])
+    if app_context.get('CONTEXT_FILE_FOUND') == 'YES':
+        html += render_table([
+            ['Web Entry Link (Loadbalancer)', app_context.get('WEB_ENTRY_HOST', '') + '.' + app_context.get('WEB_ENTRY_DOMAIN', '')],
+            ['Active External Port', app_context.get('ACTIVE_WEB_PORT', '')],
+            ['Admin Server Node', app_context.get('ADMIN_SERVER', '')],
+            ['Shared Server Trajectory', app_context.get('SHARED_APPL_TOP', '')]
+        ], ["Context Variable", "Detected Value"])
     else:
-        html += "<p style='color:var(--danger-red); font-size:14px; font-family:monospace; padding:15px; background:#FEF2F2; border-radius:5px;'>[!] No Context Files currently registered in FND_OAM_CONTEXT_FILES.</p>"
+        html += "<p style='color:var(--danger-red); font-size:14px; font-family:monospace; padding:15px; background:#FEF2F2; border-radius:5px;'>[!] Execution decoupled from Apps Context. Run tool on Web Tier to map physical Autoconfig XMLs.</p>"
 
     html += f"""
         </div>
@@ -899,48 +817,18 @@ def build_html(data):
 
         <div id="workload" class="section">
             <div class="section-header">
-                <h2>Database Workloads, High Availability & Process Engineering</h2>
+                <h2>Database Workloads & Process Engineering</h2>
             </div>
             
-            <h3>PCP (Parallel Concurrent Processing) Distribution</h3>
-            {render_table(pcp_managers, ["Queue Routing ID", "Primary Node", "Failover Node"])}
-            
-            <h3>Concurrent Manager Queue Status Matrix</h3>
-            {render_table(conc_mgr_status, ["Queue ID", "Queue Focus", "User Name", "Target Node", "Max Allowed", "Running", "Run Tasks", "Pending Tasks", "Control State"])}
-            
-            <h3>Volume of Daily Concurrent Requests for Last Month</h3>
-            {render_table(daily_conc_reqs, ["Execution Date", "Total Job Count Raised"])}
+            <h3>Active Managers & Process Spawning Limits</h3>
+            {render_table(safe_get(data, 'EBS_CONCURRENT_MANAGERS', []), ["Queue Routing ID", "Named User Queue", "Manager Standard", "Application Owner", "Internal Cache", "Spawn Target", "Running Now"])}
 
-            <h3>Top 50 Concurrent Programs by Aggregate Execution Counts</h3>
-            {render_table(top_50_execs, ["EBS Concurrent Routine Program", "Execution Count (30d)"])}
-
-            <h3>Top 50 Concurrent Programs by Average Run Time (Mins)</h3>
-            {render_table(top_50_time, ["EBS Concurrent Routine Program", "Avg Historic Duration (Mins)"])}
+            <h3>Top 50 Intensive Database Strains (Last 30 Days)</h3>
+            {render_table(safe_get(data, 'EBS_TOP_PROGRAMS', []), ["EBS Concurrent Routine Program", "Execution Count (30d)", "Avg Historic DB Time (Hrs)"])}
             
-            <h3>Top 10 Heaviest Database Segments</h3>
-            <p style="font-size:13px; color:#475569;">Storage engineering constraints for tablespace reorganizations.</p>
-            {render_table(top_10_tables, ["Database Object Segment", "Segment Type", "Consuming Space (GB)"])}
+            <h3>Concurrent Request Statistics (Last 30 Days)</h3>
+            {render_table(safe_get(data, 'CONCURRENT_REQUESTS_STATS', []), ["Status Code", "Phase Code", "Request Count"])}
             
-            <h3>Disaster Recovery (Data Guard) Topology</h3>
-            {render_table(db_dataguard, ["Archive Dest Name", "Status", "Instance Type", "Remote Address"])}
-            
-            <h3>Database Internal Configuration Limits</h3>
-            {render_table(db_internal_state, ["Internal Architecture Component", "Value limit"])}
-
-            <h3>RMAN Backup Throughput (7 Days)</h3>
-            {render_table(db_backups, ["Backup Job Status", "Completion Timestamp", "Output Bytes (GB)"])}
-            
-            <h3>Oracle Database Enterprise Feature Licensing</h3>
-            <p style="font-size:13px; color:#475569;">Flags what native engine plugins are enabled for accurate cloud commercial modeling (e.g. Partitioning, Advanced Compression).</p>
-            {render_table(db_feature_usage, ["Feature Module Name", "Active", "First Seen", "Last Known Poll"])}
-
-            <h3>Infrastructure Engine Design</h3>
-            <p style="font-size:13px; color:#475569;">Scheduler objects that require careful handling during OS migration and upgrades.</p>
-            {render_table(infra_objects, ["Object Classification", "Volumes Configured"])}
-
-            <h3>System Workloads & Footprints</h3>
-            {render_table(workload_statistics, ["Performance Category", "Count Output"])}
-
             <h3>Raw Init.ora Parameters Evaluated</h3>
             {render_table(db_params, ["Init Parameter", "Assigned Boundary"])}
         </div>
@@ -967,45 +855,11 @@ def build_html(data):
             <p>EBS uses a tightly coupled technology stack containing internal JDKs, OC4J servers, and HTTP listeners. Any custom file deployed locally (outside patching standards) onto the App filesystem must be migrated.</p>
             
             <h3>Base TechStack Context (12.1.3 Baseline)</h3>
-            """
-    
-    if len(all_nodes_context) > 0 and all_nodes_context[0][0] != 'N/A':
-        techstack_rows = []
-        for c in all_nodes_context:
-            if len(c) > 13:
-                techstack_rows.append([c[0], 'ATG_VERSION', c[6]])
-                techstack_rows.append([c[0], 'TOOLS_VERSION', c[7]])
-                techstack_rows.append([c[0], 'OHS_VERSION', c[8]])
-                techstack_rows.append([c[0], 'JDK_TARGET', c[9]])
-                techstack_rows.append([c[0], 'ADKEYSTORE', c[11]])
-                techstack_rows.append([c[0], 'TRUSTSTORE', c[12]])
-                techstack_rows.append([c[0], 'WEB_SSL_DIR', c[13]])
-        html += render_table(techstack_rows, ["Node Target", "Topology Property", "Discovered Deployment Path / Version"])
-    else:
-        html += "<p style='color:#777; font-size:14px; font-style:italic;'>TechStack Context not available in Registry.</p>"
-        
-    html += f"""
+            {render_table(safe_get(data, 'APP_TECHSTACK_INFO', []), ["Topology Property", "Discovered Deployment Path / Version"])}
             
-            <h3>Application AD / TXK Codebase Patch Level</h3>
-            <p style="font-size:13px; color:#475569;">Defines the absolute fundamental architectural requirement for Online Patching stability logic pre/post cutover.</p>
-            {render_table(ad_txk_patch_level, ["Lifecycle Release", "Patch Number", "Installation Trajectory"])}
-
-            <h3>Recent Environment Changes (Rolling 180 Days)</h3>
-            {render_table(recent_patches, ["Applied ADOP Patch", "Installation Timestamp"])}
-
             <h3>File-System Rogue Customizations (OS `find` extraction)</h3>
             <p style="font-size:13px; color:#475569;">Includes unmanaged `b64` web logic, rogue custom images missing personalization hooks, and manually dropped `.class` payloads in `$JAVA_TOP` missing standards.</p>
             {render_table(safe_get(data, 'APP_CUSTOM_FILES', []), ["File Search Target", "Discovered Quantity"])}
-            
-            <h3>Database User Password Enforcement (Profiles)</h3>
-            {render_table(user_profiles, ["Assigned Profile", "Resource Enforcement", "Boundary"])}
-            
-            <h3>Database 'APPS' Foundation Privileges</h3>
-            {render_table(role_privs, ["Target Account", "Authorized Oracle Role", "Admin Option"])}
-            
-            <h3>DMZ (External Node) Trust Modeling</h3>
-            <p style="font-size:13px; color:#475569;">Validates whether Internet-facing web servers have appropriate NODE_TRUST_LEVEL limitations mapped against restricted responsibilities (e.g. iSupplier, iRecruitment).</p>
-            {render_table(dmz_nodes, ["Profile Value", "FND System Profile"])}
         </div>
         
         <div id="workflow" class="section">
@@ -1014,10 +868,6 @@ def build_html(data):
             </div>
             <p>Critical business transaction flows often stall during upgrades if SMTP/IMAP connections or XML generation templates fail on new Java Virtual Machines.</p>
             
-            <div style="margin:20px 0; padding:15px; background:#F8FAFC; border-left:4px solid var(--primary-blue);">
-                <b>Workflow Administrator Role Configuration:</b> <code>{wf_admin_role}</code>
-            </div>
-
             <h3>Notification Mailer & Network Parameters</h3>
             {render_table(safe_get(data, 'WORKFLOW_MAILER', []), ["Component Parameter", "Network Binding"])}
             
@@ -1026,85 +876,6 @@ def build_html(data):
 
             <h3>XML Publisher (XDO) Template Demands</h3>
             {render_table(safe_get(data, 'XML_PUBLISHER_DELIVERY', []), ["Engine", "Delivery Format", "Document Volumes"])}
-        </div>
-        
-        <div id="functional" class="section">
-            <div class="section-header">
-                <h2>Functional Application Data Footprint (Volume Syncing)</h2>
-            </div>
-            <p>Master configuration and Active Transaction scaling sizes mapping Purchasing, HR, GL, Projects, Payables, and Receivables activity.</p>
-            
-            {render_table(func_volumes, ["Information Tier", "EBS Module", "Functional Object / Document", "Total Deployed Storage", "Open Transactions"])}
-            
-            <h3>Global Setup: System Languages</h3>
-            {render_table(ebs_languages, ["Oracle Language", "Language Tag Code", "Installation Mode"])}
-            
-            <h3>Global Setup: Active Localizations</h3>
-            {render_table(ebs_localizations, ["Short Name", "Regional Extension", "Activation State"])}
-            
-            <h3>User Base Trajectory (Created Per Month)</h3>
-            {render_table(users_created, ["Account Creation Month", "Volume Generated"])}
-        </div>
-
-        <div id="risks" class="section">
-            <div class="section-header">
-                <h2>Risk Register & Mitigation Plan</h2>
-            </div>
-            <p>Based on the automated analysis, the following risks have been identified that may impact the upgrade project timeline or success.</p>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th>Risk ID</th>
-                        <th>Category</th>
-                        <th>Risk Description</th>
-                        <th>Severity</th>
-                        <th>Business Impact</th>
-                        <th>Mitigation Strategy</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {''.join(f'''<tr>
-                        <td><b>{{r['id']}}</b></td>
-                        <td>{{r['category']}}</td>
-                        <td>{{r['risk']}}</td>
-                        <td><span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: {'#FEE2E2' if r['severity']=='Critical' else '#FEF3C7' if r['severity']=='High' else '#DBEAFE' if r['severity']=='Medium' else '#D1FAE5'}; color: {'#991B1B' if r['severity']=='Critical' else '#92400E' if r['severity']=='High' else '#1E40AF' if r['severity']=='Medium' else '#065F46'};">{{r['severity']}}</span></td>
-                        <td>{{r['impact']}}</td>
-                        <td>{{r['mitigation']}}</td>
-                    </tr>''' for r in risk_register)}
-                </tbody>
-            </table>
-            
-            <h3 style="margin-top: 30px;">Recommended Actions Before Upgrade</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 15px;">
-                <div style="background: #F0FDF4; border: 1px solid #86EFAC; padding: 15px; border-radius: 8px;">
-                    <b style="color: #166534;">✓ Pre-Upgrade Preparation</b>
-                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #166534; font-size: 14px;">
-                        <li>Run Oracle EBS Upgrade Analyzer (RUP)</li>
-                        <li>Run Database Upgrade Analyzer for 19c</li>
-                        <li>Generate ETCC compliance report</li>
-                        <li>Document all custom code inventory</li>
-                    </ul>
-                </div>
-                <div style="background: #FEF3C7; border: 1px solid #FCD34D; padding: 15px; border-radius: 8px;">
-                    <b style="color: #92400E;">⚠ Technical Remediation</b>
-                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400E; font-size: 14px;">
-                        <li>Resolve all invalid objects</li>
-                        <li>Enable edition-based custom schemas</li>
-                        <li>Convert UTL_FILE_DIR to directories</li>
-                        <li>Test all database links connectivity</li>
-                    </ul>
-                </div>
-                <div style="background: #DBEAFE; border: 1px solid #93C5FD; padding: 15px; border-radius: 8px;">
-                    <b style="color: #1E40AF;">📋 Planning & Governance</b>
-                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #1E40AF; font-size: 14px;">
-                        <li>Define cutover window requirements</li>
-                        <li>Plan minimum 3 rehearsal cycles</li>
-                        <li>Establish rollback procedures</li>
-                        <li>Coordinate with all integration teams</li>
-                    </ul>
-                </div>
-            </div>
         </div>
 
         <div id="risks" class="section">
