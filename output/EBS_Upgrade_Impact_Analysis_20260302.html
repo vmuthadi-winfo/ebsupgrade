@@ -39,11 +39,15 @@
         .cd-val { width: 30px; text-align: right; font-weight: 700; color: #fff; }
 
         .section { background:var(--card-bg); border-radius:12px; padding:35px; margin-bottom:40px; box-shadow:0 4px 15px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
-        .section-header { display: flex; align-items: center; border-bottom:2px solid var(--light-blue); padding-bottom:15px; margin-bottom: 25px; }
-        .section-header h2 { color:var(--primary-blue); margin: 0; font-size: 22px; }
+        .section-header { display: flex; align-items: center; border-bottom:2px solid var(--light-blue); padding-bottom:15px; margin-bottom: 25px; cursor: pointer; }
+        .section-header h2 { color:var(--primary-blue); margin: 0; font-size: 22px; width: 100%; }
+        .section-header::after { content: '▼'; font-size: 14px; color: var(--primary-blue); margin-left: auto; transition: transform 0.3s; }
+        .section.collapsed .section-header::after { transform: rotate(-90deg); }
+        .section.collapsed .section-content { display: none; }
         
-        details { background-color: #F8FAFC; border: 1px solid var(--border-grey); padding: 10px 15px; border-radius: 6px; margin-top: 15px; cursor: pointer; }
-        summary { font-weight: 600; color: var(--primary-blue); font-size: 15px; outline: none; }
+        details { background-color: #F8FAFC; border: 1px solid var(--border-grey); padding: 10px 15px; border-radius: 6px; margin-top: 15px; cursor: pointer; transition: all 0.2s; }
+        details:hover { border-color: #cbd5e1; }
+        summary { font-weight: 600; color: var(--primary-blue); font-size: 15px; outline: none; display: flex; align-items: center; }
         details[open] summary { border-bottom: 1px solid var(--border-grey); padding-bottom: 10px; margin-bottom: 10px; }
         .section h3 { color:var(--primary-blue); margin-top:35px; font-size: 18px; display: flex; align-items: center; }
         
@@ -78,7 +82,7 @@
 <body>
     <div class="header">
         <h1>Oracle EBS & Database Upgrade Analysis</h1>
-        <div style="font-size:14px; opacity:0.9; font-weight: 500;">Collection Timestamp: 2026-03-02 18:45</div>
+        <div style="font-size:14px; opacity:0.9; font-weight: 500;">Collection Timestamp: 2026-03-02 15:13</div>
     </div>
 
     <div class="nav-sidebar">
@@ -87,16 +91,17 @@
         <a href="#roadmap">3. Upgrade Roadmap</a>
         <a href="#effort">4. Effort Estimation</a>
         <a href="#cemli">5. CEMLI / Customization Impact</a>
-        <a href="#topology">6. System Topology</a>
-        <a href="#integrations">7. Enterprise Integrations</a>
-        <a href="#database">8. Database Analysis</a>
-        <a href="#workload">9. Database Workloads / HA</a>
-        <a href="#sizing">10. Target Sizing & Capacity</a>
-        <a href="#techstack">11. App TechStack & Security</a>
-        <a href="#workflow">12. Workflow & Mailer Footprint</a>
-        <a href="#functional">13. Functional Data Volumes</a>
-        <a href="#risks">14. Risk Register</a>
+        <a href="#topology">6. Physical Architecture</a>
+        <a href="#wls_sizing">7. WLS Sizing & Context Services</a>
+        <a href="#integrations">8. Enterprise Integrations</a>
+        <a href="#database">9. Database Analysis</a>
+        <a href="#workload">10. Performance & Processing</a>
+        <a href="#workflow">11. Fusion Middleware Components</a>
+        <a href="#functional">12. Functional Data Volumes</a>
+        <a href="#risks">13. Risk Register</a>
     </div>
+
+    <a href="#" id="backToTop" title="Back to Top" style="display:none; position:fixed; bottom:30px; right:30px; background:var(--primary-blue); color:white; padding:15px; border-radius:50%; text-decoration:none; font-weight:bold; z-index:999; box-shadow:0 4px 10px rgba(0,0,0,0.2);">↑</a>
 
     <div class="main-content">
         <!-- Dashboard Summary -->
@@ -345,103 +350,56 @@
             <h3>Other Customized Core Components</h3>
             <div style='margin-bottom: 5px; color:#555;'><b>Custom Workflow Definitions</b> (0 items)</div>
             <div style='margin-bottom: 5px; color:#555;'><b>BIP / XML Publisher Templates</b> (0 items)</div>
-        </div>
-
-        <div id="integrations" class="section">
-            <div class="section-header">
-                <h2>Enterprise Peripheral Integrations</h2>
-            </div>
-            <p>EBS relies intricately on external software portfolios. Profile values indicate what is actively connected vs unused.</p>
             
-            <div class="grid-integrations">
-    
-                <div class="integ-card" style="border-top-color: var(--warning-amber)">
-                    <div class="integ-title">
-                        SSO
-                        <span class="integ-status" style="background-color: var(--warning-amber)">Active</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">Potential SSO / Access Gate detected via disjointed Auth & Framework Agents.</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--warning-amber)">
-                        <b>Upgrade Action:</b> Verify SSO Trust architecture prior to upgrading.
-                    </div>
-                </div>
-        
-                <div class="integ-card" style="border-top-color: var(--warning-amber)">
-                    <div class="integ-title">
-                        APEX
-                        <span class="integ-status" style="background-color: var(--warning-amber)">Active</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">Active via FND_APEX_URL. DB reports APEX vUnknown and ORDS vUnknown. Custom code and APEX Listeners require testing across 19c/23ai.</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--warning-amber)">
-                        <b>Upgrade Action:</b> APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.
-                    </div>
-                </div>
-        
-                <div class="integ-card" style="border-top-color: var(--border-grey)">
-                    <div class="integ-title">
-                        ECC
-                        <span class="integ-status" style="background-color: var(--border-grey)">Disabled</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">Enterprise Command Center not found in fnd profiles.</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--border-grey)">
-                        <b>Upgrade Action:</b> Consider deploying ECC V12 for modern EBS 12.2.14+ reporting.
-                    </div>
-                </div>
-        
-                <div class="integ-card" style="border-top-color: var(--warning-amber)">
-                    <div class="integ-title">
-                        SOA_ISG
-                        <span class="integ-status" style="background-color: var(--warning-amber)">Active</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">SOA/ISG/REST detected. Integrated SOA Gateway has major architectural shifts in 12.2.</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--warning-amber)">
-                        <b>Upgrade Action:</b> REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.
-                    </div>
-                </div>
-        
-                <div class="integ-card" style="border-top-color: var(--primary-blue)">
-                    <div class="integ-title">
-                        OBIEE
-                        <span class="integ-status" style="background-color: var(--primary-blue)">Active</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">OBIEE / OAC URL Profiles defined.</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--primary-blue)">
-                        <b>Upgrade Action:</b> No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.
-                    </div>
-                </div>
-        
-                <div class="integ-card" style="border-top-color: var(--danger-red)">
-                    <div class="integ-title">
-                        ENDECA
-                        <span class="integ-status" style="background-color: var(--danger-red)">Active</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">Endeca extensions detected.</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--danger-red)">
-                        <b>Upgrade Action:</b> Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.
-                    </div>
-                </div>
-        
-                <div class="integ-card" style="border-top-color: var(--danger-red)">
-                    <div class="integ-title">
-                        VERTEX
-                        <span class="integ-status" style="background-color: var(--danger-red)">Active</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">Vertex Tax Integration.</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--danger-red)">
-                        <b>Upgrade Action:</b> Verify Vertex O series certification matrix for target OS and EBS 12.2.
-                    </div>
-                </div>
-        
-            </div>
-        </div>
-
-        <div id="database" class="section">
-            <div class="section-header">
-                <h2>Database Deep-Dive Architecture</h2>
-            </div>
-            <h3>Database Storage Allocations (GB)</h3>
-            <p style="font-size:13px; color:#475569;">Storage modeling constraints for Exadata or Cloud deployments.</p>
-            <table><thead><tr><th>Storage State</th><th>Volume</th></tr></thead><tbody><tr><td>Allocated & Used</td><td>215 GB</td></tr><tr><td>Free Available</td><td>84 GB</td></tr></tbody></table>
+            <h3>Flagged Files for Upgrade Analysis</h3>
+            <p style="font-size:13px; color:#475569;">Custom files tracked in AD schema that require review and potential remediation during upgrade. These include XX-prefixed files and files in custom directories.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>View Flagged Custom Files (AD_FILES)</b> (0 items)</div>
+            
+            <h3>Custom Application Tops</h3>
+            <p style="font-size:13px; color:#475569;">Registered custom APPL_TOP directories that may contain custom code requiring migration.</p>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Custom Files Distribution by Type</h3>
+            <p style="font-size:13px; color:#475569;">Breakdown of custom file extensions to identify file types requiring specific remediation (e.g., .fmb, .pll, .class, .java).</p>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Recently Patched Files (Last 90 Days)</h3>
+            <p style="font-size:13px; color:#475569;">Files modified by recent patches that may impact custom code dependencies.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>View Recently Patched Files</b> (0 items)</div>
+            
+            <h3>CEMLI: Custom Applications</h3>
+            <p style="font-size:13px; color:#475569;">Registered custom applications in FND_APPLICATION that require migration.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>View Custom Applications</b> (0 items)</div>
+            
+            <h3>CEMLI: Custom Alerts</h3>
+            <div style='margin-bottom: 5px; color:#555;'><b>View Custom Alerts</b> (0 items)</div>
+            
+            <h3>CEMLI: Concurrent Programs by Execution Type</h3>
+            <p style="font-size:13px; color:#475569;">Custom concurrent programs categorized by their execution method for targeted remediation.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>Host (Shell) Programs</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Java Programs</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Oracle Reports</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>SQL*Loader Programs</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>SQL*Plus Programs</b> (0 items)</div>
+            
+            <h3>CEMLI: Custom Database Objects</h3>
+            <p style="font-size:13px; color:#475569;">Custom database objects (XX-prefixed) that require EBR enablement and validation.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Functions</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Packages</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Procedures</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Tables</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Views</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Indexes</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Sequences</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Synonyms</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Triggers</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Types</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Materialized Views</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Custom Queues</b> (0 items)</div>
+            
+            <h3>CEMLI: Custom Reporting Objects</h3>
+            <div style='margin-bottom: 5px; color:#555;'><b>XML Publisher Templates</b> (0 items)</div>
+            <div style='margin-bottom: 5px; color:#555;'><b>Data Definitions</b> (0 items)</div>
         </div>
 
         <div id="topology" class="section">
@@ -452,11 +410,13 @@
             <h3>Application Node Definitions</h3>
             <table><thead><tr><th>Registrar Hostname</th><th>Batch/Concurrent</th><th>Forms Service</th><th>Web Service</th><th>Data Node</th><th>Current State</th></tr></thead><tbody><tr><td>WINFO106</td><td>YES</td><td>YES</td><td>YES</td><td>YES</td><td>Y</td></tr><tr><td>WINFO106.WINFOSOLUTIONS.COM</td><td>NO</td><td>NO</td><td>NO</td><td>NO</td><td></td></tr></tbody></table>
             
-            <div id="infra" class="section">
-                <div class="section-header">
-                    <h2>Infrastructure Component Counts</h2>
-                </div>
-                
+        </div>
+
+        <div id="infra" class="section">
+            <div class="section-header">
+                <h2>Infrastructure Component Counts</h2>
+            </div>
+            
     <details style="margin-bottom: 10px; background: #fdfdfd; border: 1px solid #eee; border-radius: 6px; padding: 5px 10px;">
         <summary style="cursor: pointer; font-weight: 600; color: #0A3A6B; outline: none;">
             Scheduler Jobs, Materialized Views & Partitions <span style="font-weight: normal; color: #666;">(3 items)</span>
@@ -466,10 +426,114 @@
         </div>
     </details>
     
+        </div>
+        
+        <div id="wls_sizing" class="section">
+            <div class="section-header">
+                <h2>WLS Architecture Sizing & Java Context Parameters</h2>
             </div>
+            <p>Target WebLogic domain deployment footprint extracted deeply from FND_OAM_CONTEXT_FILES across all nodes.</p>
+            
+            <h3>Application File Systems (Mount Directories)</h3>
+            <table><thead><tr><th>Physical Node</th><th>EBS File System Variable</th><th>Target Mount / Path Location</th></tr></thead><tbody><tr><td>ERROR:</td><td></td><td></td></tr><tr><td>ORA-19025: EXTRACTVALUE returns value of only one node</td><td></td><td></td></tr></tbody></table>
+            
+            <h3>Target JVM Services & Memory Allocations</h3>
+            <p style="font-size:13px; color:#475569;">Metrics necessary to calculate required Managed Servers and Heap Sizing per Node (oacore, forms, oafm).</p>
+            <table><thead><tr><th>Physical Node</th><th>WebLogic / Form Server Service</th><th>Allocated NPROCS (Processes)</th><th>Java JVM Start Parameters Options</th></tr></thead><tbody><tr><td>union all</td><td></td><td></td><td></td></tr><tr><td>*</td><td></td><td></td><td></td></tr><tr><td>ERROR at line 23:</td><td></td><td></td><td></td></tr><tr><td>ORA-00928: missing SELECT keyword</td><td></td><td></td><td></td></tr></tbody></table>
+            
+            <h3>Ports, Keystores & Security Connectors</h3>
+            <table><thead><tr><th>Physical Node</th><th>Configuration Property Name</th><th>Value Resolved</th></tr></thead><tbody><tr><td>WINFO106</td><td>port_pool</td><td></td></tr><tr><td>WINFO106</td><td>sslterminator</td><td></td></tr><tr><td>WINFO106</td><td>session_timeout</td><td></td></tr><tr><td>WINFO106</td><td>ssl_keystore</td><td></td></tr><tr><td>WINFO106</td><td>scan_name</td><td></td></tr><tr><td>WINFO106</td><td>scan_port</td><td></td></tr><tr><td>WINFO106</td><td>appserverid_authentication</td><td></td></tr><tr><td>WINFO106</td><td>java_object_cache_port</td><td></td></tr></tbody></table>
+            
+            <h3>Database Networking & JDBC Profiles</h3>
+            <table><thead><tr><th>Physical Node</th><th>Network Property Name</th><th>JDBC Description or URL Profile</th></tr></thead><tbody><tr><td>WINFO106</td><td>jdbc_url</td><td></td></tr><tr><td>WINFO106</td><td>dbc_file</td><td></td></tr></tbody></table>
+        </div>
 
-            <h3>Global Applications Context Framework (Sourced from FND_OAM_CONTEXT_FILES)</h3>
-            <p style='color:var(--danger-red); font-size:14px; font-family:monospace; padding:15px; background:#FEF2F2; border-radius:5px;'>[!] No Context Files currently registered in FND_OAM_CONTEXT_FILES.</p>
+        <div id="integrations" class="section">
+            <div class="section-header">
+                <h2>Enterprise Peripheral Integrations</h2>
+            </div>
+            <p>EBS relies intricately on external software portfolios. Profile values indicate what is actively connected vs unused.</p>
+            
+            <div class="grid-integrations">
+    
+                <div class="integ-card" style="border-top-color: var(--border-grey)">
+                    <div class="integ-title">
+                        SSO
+                        <span class="integ-status" style="background-color: var(--border-grey)">Standard</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">APPS_SSO=SSWA indicates standard EBS Self-Service login. No external SSO/OAM integration.</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--border-grey)">
+                        <b>Upgrade Action:</b> Standard FND User migration with no SSO dependencies.
+                    </div>
+                </div>
+        
+                <div class="integ-card" style="border-top-color: var(--warning-amber)">
+                    <div class="integ-title">
+                        APEX
+                        <span class="integ-status" style="background-color: var(--warning-amber)">Active</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">Active via FND_APEX_URL=https://winfo106.winfosolutions.com:4443/apex. DB reports APEX vUnknown and ORDS vUnknown. Custom code and APEX Listeners require testing across 19c/23ai.</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--warning-amber)">
+                        <b>Upgrade Action:</b> APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.
+                    </div>
+                </div>
+        
+                <div class="integ-card" style="border-top-color: var(--border-grey)">
+                    <div class="integ-title">
+                        ECC
+                        <span class="integ-status" style="background-color: var(--border-grey)">Not Configured</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">ECC Command Center Profiles exist but are blank.</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--border-grey)">
+                        <b>Upgrade Action:</b> Consider deploying ECC V12 for modern reporting.
+                    </div>
+                </div>
+        
+                <div class="integ-card" style="border-top-color: var(--border-grey)">
+                    <div class="integ-title">
+                        SOA_ISG
+                        <span class="integ-status" style="background-color: var(--border-grey)">Disabled</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">Integrated SOA Gateway (ISG) or SOA Suite ties are not mapped.</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--border-grey)">
+                        <b>Upgrade Action:</b> N/A
+                    </div>
+                </div>
+        
+                <div class="integ-card" style="border-top-color: var(--primary-blue)">
+                    <div class="integ-title">
+                        OBIEE
+                        <span class="integ-status" style="background-color: var(--primary-blue)">Active</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">OBIEE/OAC configured via FND_OBIEE_URL=http://fa5099-obiee.oracleads.com:80.</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--primary-blue)">
+                        <b>Upgrade Action:</b> No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.
+                    </div>
+                </div>
+        
+                <div class="integ-card" style="border-top-color: var(--danger-red)">
+                    <div class="integ-title">
+                        ENDECA
+                        <span class="integ-status" style="background-color: var(--danger-red)">Active</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">7 Endeca-related profiles with values detected. Information Discovery may be in use.</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--danger-red)">
+                        <b>Upgrade Action:</b> Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.
+                    </div>
+                </div>
+        
+                <div class="integ-card" style="border-top-color: var(--danger-red)">
+                    <div class="integ-title">
+                        VERTEX
+                        <span class="integ-status" style="background-color: var(--danger-red)">Active</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">Vertex Tax Integration detected via HR_US_VERTEX_WEB_SERVICE_PORT.</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var(--danger-red)">
+                        <b>Upgrade Action:</b> Verify Vertex O series certification matrix for target OS and EBS 12.2.
+                    </div>
+                </div>
+        
+            </div>
         </div>
 
         <div id="database" class="section">
@@ -521,6 +585,10 @@
             <h3>Recently Applied Patches (Last 180 Days)</h3>
             <table><thead><tr><th>Patch Name</th><th>Patch Type</th><th>Applied Date</th></tr></thead><tbody><tr><td>37907177</td><td>ONE-OFF</td><td>2026-01-22</td></tr><tr><td>37907177</td><td>ONE-OFF</td><td>2026-01-22</td></tr><tr><td>38500628</td><td>ONE-OFF</td><td>2025-10-30</td></tr><tr><td>37450688</td><td>ONE-OFF</td><td>2025-10-30</td></tr><tr><td>37450688</td><td>ONE-OFF</td><td>2025-10-30</td></tr><tr><td>38298685</td><td>ONE-OFF</td><td>2025-10-23</td></tr><tr><td>38298685</td><td>ONE-OFF</td><td>2025-10-23</td></tr><tr><td>37182901</td><td>ONE-OFF</td><td>2025-10-21</td></tr><tr><td>37182901</td><td>ONE-OFF</td><td>2025-10-21</td></tr><tr><td>37182900</td><td>MAINTENANCE-PACK</td><td>2025-10-20</td></tr><tr><td>37182900</td><td>MAINTENANCE-PACK</td><td>2025-10-20</td></tr><tr><td>37204510</td><td>ONE-OFF</td><td>2025-10-20</td></tr><tr><td>37204510</td><td>ONE-OFF</td><td>2025-10-20</td></tr><tr><td>37197085</td><td>PATCH-SET</td><td>2025-10-20</td></tr><tr><td>37197085</td><td>PATCH-SET</td><td>2025-10-20</td></tr><tr><td>38501349</td><td>ONE-OFF</td><td>2025-10-18</td></tr><tr><td>38501757</td><td>ONE-OFF</td><td>2025-10-18</td></tr><tr><td>38512809</td><td>ONE-OFF</td><td>2025-10-18</td></tr><tr><td>38512809</td><td>ONE-OFF</td><td>2025-10-18</td></tr><tr><td>38502365</td><td>ONE-OFF</td><td>2025-10-18</td></tr><tr><td>37120495</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37120482</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37120463</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37078943</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37078943</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>36453170</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>36453170</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37078919</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37078919</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37288039</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37120448</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37120430</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37120399</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37068559</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>33623398</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37327694</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37327694</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37620005</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37078895</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37078895</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37902555</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37923872</td><td>ONE-OFF</td><td>2025-10-17</td></tr><tr><td>37923872</td><td>ONE-OFF</td><td>2025-10-17</td></tr></tbody></table>
             
+            <h3>Applied Patches (Last 90 Days - Detailed)</h3>
+            <p style="font-size:13px; color:#475569;">Comprehensive patch application history extracted from AD schema for recent upgrade activity tracking.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>View Applied Patches in Last 90 Days</b> (0 items)</div>
+            
             <h3>Database Links Detail</h3>
             <table><thead><tr><th>Owner</th><th>DB Link Name</th><th>Host</th></tr></thead><tbody><tr><td>SYS</td><td>SYS_HUB.US.ORACLE.COM</td><td>CPQ1229N</td></tr></tbody></table>
         </div>
@@ -538,6 +606,14 @@
             
             <h3>Volume of Daily Concurrent Requests for Last Month</h3>
             <table><thead><tr><th>Execution Date</th><th>Total Job Count Raised</th></tr></thead><tbody><tr><td>2026-03-02</td><td>14</td></tr><tr><td>2026-03-01</td><td>39</td></tr><tr><td>2026-02-28</td><td>47</td></tr><tr><td>2026-02-27</td><td>55</td></tr><tr><td>2026-02-26</td><td>54</td></tr><tr><td>2026-02-25</td><td>47</td></tr><tr><td>2026-02-24</td><td>51</td></tr><tr><td>2026-02-23</td><td>48</td></tr><tr><td>2026-02-22</td><td>47</td></tr><tr><td>2026-02-21</td><td>47</td></tr><tr><td>2026-02-20</td><td>49</td></tr><tr><td>2026-02-19</td><td>47</td></tr><tr><td>2026-02-18</td><td>63</td></tr><tr><td>2026-02-17</td><td>67</td></tr><tr><td>2026-02-16</td><td>56</td></tr><tr><td>2026-02-15</td><td>48</td></tr><tr><td>2026-02-14</td><td>47</td></tr><tr><td>2026-02-13</td><td>49</td></tr><tr><td>2026-02-12</td><td>50</td></tr><tr><td>2026-02-11</td><td>74</td></tr><tr><td>2026-02-10</td><td>72</td></tr><tr><td>2026-02-09</td><td>286</td></tr><tr><td>2026-02-08</td><td>47</td></tr><tr><td>2026-02-07</td><td>56</td></tr><tr><td>2026-02-06</td><td>70</td></tr><tr><td>2026-02-05</td><td>85</td></tr><tr><td>2026-02-04</td><td>66</td></tr><tr><td>2026-02-03</td><td>50</td></tr><tr><td>2026-02-02</td><td>62</td></tr><tr><td>2026-02-01</td><td>56</td></tr><tr><td>2026-01-31</td><td>47</td></tr></tbody></table>
+
+            <h3>Top 100 Concurrent Programs by Execution Count (30d)</h3>
+            <p style="font-size:13px; color:#475569;">Extended analysis of most frequently executed concurrent programs over the last 30 days.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>View Top 100 Programs by Execution Count</b> (0 items)</div>
+
+            <h3>Top 100 Concurrent Programs by Average Run Time</h3>
+            <p style="font-size:13px; color:#475569;">Detailed performance analysis including average, maximum, and minimum execution times in hours.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>View Top 100 Programs by Average Time</b> (0 items)</div>
 
             <h3>Top 50 Concurrent Programs by Aggregate Execution Counts</h3>
             <table><thead><tr><th>EBS Concurrent Routine Program</th><th>Execution Count (30d)</th></tr></thead><tbody><tr><td>OAM Applications Dashboard Collection</td><td>1419</td></tr><tr><td>Open Period</td><td>151</td></tr><tr><td>Open Period Balances</td><td>121</td></tr><tr><td>Import Standard Purchase Orders</td><td>35</td></tr><tr><td>DQM Serial Sync Index Program</td><td>29</td></tr><tr><td>Order Import</td><td>18</td></tr><tr><td>PO Output for Communication</td><td>13</td></tr><tr><td>Compile Security Menu</td><td>13</td></tr><tr><td>Format Payment Instructions</td><td>10</td></tr><tr><td>Scheduled Payment Selection Report</td><td>9</td></tr><tr><td>Other - Calendar Validation Report</td><td>9</td></tr><tr><td>Posting: Single Ledger</td><td>7</td></tr><tr><td>Request Set Stage</td><td>6</td></tr><tr><td>Payment Process Request Program</td><td>6</td></tr><tr><td>Build Payments</td><td>6</td></tr><tr><td>Record Print Status</td><td>5</td></tr><tr><td>Recalculate Payment Process Request</td><td>4</td></tr><tr><td>Bank Statement Cashflow Creation</td><td>3</td></tr><tr><td>Create Accounting</td><td>3</td></tr><tr><td>Report Set</td><td>3</td></tr><tr><td>Compile Key Flexfields</td><td>3</td></tr><tr><td>Create Reporting Sequence Number</td><td>3</td></tr><tr><td>Bank Statement Cashflow Creation Execution Report</td><td>3</td></tr><tr><td>Pay On Receipt AutoInvoice</td><td>2</td></tr><tr><td>Receiving Transaction Processor</td><td>2</td></tr><tr><td>Program - Generate Ledger Flexfield</td><td>2</td></tr><tr><td>Flexfield View Generator</td><td>2</td></tr><tr><td>Periods - Close Period</td><td>2</td></tr><tr><td>Open Encumbrance Year</td><td>2</td></tr><tr><td>Trial Balance - Detail</td><td>1</td></tr><tr><td>Process Lockboxes</td><td>1</td></tr><tr><td>Terminate Invoice Approval Workflow Process</td><td>1</td></tr><tr><td>Send Separate Remittance Advices</td><td>1</td></tr><tr><td>Program - Automatic Posting</td><td>1</td></tr></tbody></table>
@@ -618,7 +694,7 @@
             <p>EBS uses a tightly coupled technology stack containing internal JDKs, OC4J servers, and HTTP listeners. Any custom file deployed locally (outside patching standards) onto the App filesystem must be migrated.</p>
             
             <h3>Base TechStack Context (12.1.3 Baseline)</h3>
-            <p style='color:#777; font-size:14px; font-style:italic;'>TechStack Context not available in Registry.</p>
+            <table><thead><tr><th>Physical Node</th><th>Configuration Property</th><th>Deployment Path / Value</th></tr></thead><tbody><tr><td>ERROR:</td><td></td><td></td></tr><tr><td>ORA-19025: EXTRACTVALUE returns value of only one node</td><td></td><td></td></tr></tbody></table>
             
             <h3>File-System Rogue Customizations (OS `find` extraction)</h3>
             <p style="font-size:13px; color:#475569;">Includes unmanaged `b64` web logic, rogue custom images missing personalization hooks, and manually dropped `.class` payloads in `$JAVA_TOP` missing standards.</p>
@@ -671,6 +747,49 @@
             
             <h3>User Base Trajectory (Created Per Month)</h3>
             <table><thead><tr><th>Account Creation Month</th><th>Volume Generated</th></tr></thead><tbody><tr><td>2026-02</td><td>4</td></tr><tr><td>2026-01</td><td>2</td></tr><tr><td>2024-09</td><td>1</td></tr><tr><td>2023-03</td><td>1</td></tr><tr><td>2021-04</td><td>1</td></tr><tr><td>2020-12</td><td>1</td></tr><tr><td>2020-10</td><td>1</td></tr><tr><td>2019-08</td><td>2</td></tr><tr><td>2010-12</td><td>2</td></tr><tr><td>2010-10</td><td>46</td></tr><tr><td>2010-09</td><td>9</td></tr><tr><td>2010-08</td><td>1</td></tr><tr><td>2010-02</td><td>11</td></tr><tr><td>2009-11</td><td>188</td></tr><tr><td>2009-10</td><td>1</td></tr><tr><td>2009-09</td><td>1</td></tr><tr><td>2009-08</td><td>1</td></tr><tr><td>2009-05</td><td>14</td></tr><tr><td>2009-04</td><td>178</td></tr><tr><td>2009-03</td><td>89</td></tr><tr><td>2009-02</td><td>21</td></tr><tr><td>2009-01</td><td>3</td></tr><tr><td>2008-12</td><td>2</td></tr><tr><td>2008-10</td><td>14</td></tr><tr><td>2008-02</td><td>4</td></tr><tr><td>2008-01</td><td>23</td></tr><tr><td>2007-12</td><td>2</td></tr><tr><td>2007-09</td><td>3</td></tr><tr><td>2007-08</td><td>33</td></tr><tr><td>2007-07</td><td>4</td></tr><tr><td>2007-05</td><td>4</td></tr><tr><td>2007-04</td><td>3</td></tr><tr><td>2007-02</td><td>53</td></tr><tr><td>2007-01</td><td>54</td></tr><tr><td>2006-12</td><td>16</td></tr><tr><td>2006-11</td><td>9</td></tr><tr><td>2006-10</td><td>8</td></tr><tr><td>2006-09</td><td>22</td></tr><tr><td>2006-08</td><td>3</td></tr><tr><td>2006-07</td><td>8</td></tr><tr><td>2006-06</td><td>2</td></tr><tr><td>2006-05</td><td>1</td></tr><tr><td>2006-03</td><td>6</td></tr><tr><td>2006-02</td><td>4</td></tr><tr><td>2006-01</td><td>10</td></tr><tr><td>2005-12</td><td>45</td></tr><tr><td>2005-11</td><td>10</td></tr><tr><td>2005-10</td><td>6</td></tr><tr><td>2005-09</td><td>8</td></tr><tr><td>2005-08</td><td>6</td></tr><tr><td>2005-07</td><td>20</td></tr><tr><td>2005-06</td><td>30</td></tr><tr><td>2005-05</td><td>61</td></tr><tr><td>2005-04</td><td>24</td></tr><tr><td>2005-03</td><td>37</td></tr><tr><td>2005-02</td><td>67</td></tr><tr><td>2005-01</td><td>39</td></tr><tr><td>2004-12</td><td>13</td></tr><tr><td>2004-11</td><td>13</td></tr><tr><td>2004-10</td><td>21</td></tr><tr><td>2004-09</td><td>61</td></tr><tr><td>2004-08</td><td>19</td></tr><tr><td>2004-07</td><td>45</td></tr><tr><td>2004-06</td><td>30</td></tr><tr><td>2004-05</td><td>28</td></tr><tr><td>2004-04</td><td>34</td></tr><tr><td>2004-03</td><td>18</td></tr><tr><td>2004-02</td><td>13</td></tr><tr><td>2004-01</td><td>15</td></tr><tr><td>2003-12</td><td>1</td></tr><tr><td>2003-11</td><td>27</td></tr><tr><td>2003-10</td><td>62</td></tr><tr><td>2003-09</td><td>34</td></tr><tr><td>2003-08</td><td>88</td></tr><tr><td>2003-07</td><td>78</td></tr><tr><td>2003-06</td><td>36</td></tr><tr><td>2003-05</td><td>12</td></tr><tr><td>2003-04</td><td>3</td></tr><tr><td>2003-03</td><td>14</td></tr><tr><td>2003-02</td><td>134</td></tr><tr><td>2003-01</td><td>40</td></tr><tr><td>2002-12</td><td>8</td></tr><tr><td>2002-11</td><td>70</td></tr><tr><td>2002-10</td><td>121</td></tr><tr><td>2002-09</td><td>6</td></tr><tr><td>2002-08</td><td>38</td></tr><tr><td>2002-07</td><td>7</td></tr><tr><td>2002-06</td><td>2</td></tr><tr><td>2002-05</td><td>30</td></tr><tr><td>2002-04</td><td>9</td></tr><tr><td>2002-03</td><td>13</td></tr><tr><td>2002-02</td><td>100</td></tr><tr><td>2002-01</td><td>46</td></tr><tr><td>2001-12</td><td>11</td></tr><tr><td>2001-11</td><td>4</td></tr><tr><td>2001-10</td><td>2</td></tr><tr><td>2001-09</td><td>2</td></tr><tr><td>2001-08</td><td>66</td></tr><tr><td>2001-07</td><td>61</td></tr><tr><td>2001-06</td><td>60</td></tr><tr><td>2001-05</td><td>10</td></tr><tr><td>2001-04</td><td>19</td></tr><tr><td>2001-03</td><td>36</td></tr><tr><td>2001-02</td><td>60</td></tr><tr><td>2001-01</td><td>49</td></tr><tr><td>2000-12</td><td>2</td></tr><tr><td>2000-10</td><td>18</td></tr><tr><td>2000-09</td><td>47</td></tr><tr><td>2000-08</td><td>53</td></tr><tr><td>2000-07</td><td>46</td></tr><tr><td>2000-05</td><td>11</td></tr><tr><td>2000-04</td><td>26</td></tr><tr><td>2000-03</td><td>16</td></tr><tr><td>2000-02</td><td>24</td></tr><tr><td>2000-01</td><td>13</td></tr><tr><td>1999-12</td><td>1</td></tr><tr><td>1999-11</td><td>2</td></tr><tr><td>1999-10</td><td>14</td></tr><tr><td>1999-09</td><td>3</td></tr><tr><td>1999-08</td><td>8</td></tr><tr><td>1999-07</td><td>27</td></tr><tr><td>1999-06</td><td>2</td></tr><tr><td>1999-02</td><td>4</td></tr><tr><td>1999-01</td><td>3</td></tr><tr><td>1998-11</td><td>5</td></tr><tr><td>1998-10</td><td>2</td></tr><tr><td>1998-08</td><td>1</td></tr><tr><td>1998-07</td><td>4</td></tr><tr><td>1998-06</td><td>4</td></tr><tr><td>1998-03</td><td>14</td></tr><tr><td>1998-02</td><td>4</td></tr><tr><td>1998-01</td><td>9</td></tr><tr><td>1997-12</td><td>32</td></tr><tr><td>1997-11</td><td>3</td></tr><tr><td>1997-08</td><td>12</td></tr><tr><td>1997-07</td><td>2</td></tr><tr><td>1997-06</td><td>5</td></tr><tr><td>1997-05</td><td>16</td></tr><tr><td>1997-04</td><td>10</td></tr><tr><td>1997-03</td><td>16</td></tr><tr><td>1997-02</td><td>16</td></tr><tr><td>1996-11</td><td>2</td></tr><tr><td>1996-02</td><td>2</td></tr><tr><td>1996-01</td><td>2</td></tr><tr><td>1995-06</td><td>1</td></tr><tr><td>1991-05</td><td>1</td></tr><tr><td>1988-04</td><td>1</td></tr><tr><td>1987-05</td><td>2</td></tr><tr><td>1987-04</td><td>2</td></tr></tbody></table>
+            
+            <h3>Active Users with Responsibilities</h3>
+            <p style="font-size:13px; color:#475569;">Mapping of active users to their assigned responsibilities for security and access control analysis during upgrade.</p>
+            <div style='margin-bottom: 5px; color:#555;'><b>View Active Users with Responsibilities (up to 1000)</b> (0 items)</div>
+            
+            <h3>Organization Structure: Business Groups</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Organization Structure: Set of Books / Ledgers</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Organization Structure: Legal Entities</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Organization Structure: Operating Units</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Organization Structure: Inventory Organizations</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Module Data Volumes: Payables (AP)</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Module Data Volumes: Receivables (AR)</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Module Data Volumes: General Ledger (GL)</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Module Data Volumes: Purchasing (PO)</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Module Data Volumes: Order Management (OM)</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Module Data Volumes: Inventory (INV)</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Module Data Volumes: Human Resources (HR)</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
+            
+            <h3>Module Data Volumes: Fixed Assets (FA)</h3>
+            <p style='color:#777; font-size:14px; font-style:italic;'>No data found for this section.</p>
         </div>
 
         <div id="risks" class="section">
@@ -705,74 +824,6 @@
                         <td><span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: #FEF3C7; color: #92400E;">{r['severity']}</span></td>
                         <td>{r['impact']}</td>
                         <td>{r['mitigation']}</td>
-                    </tr>
-                </tbody>
-            </table>
-            
-            <h3 style="margin-top: 30px;">Recommended Actions Before Upgrade</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 15px;">
-                <div style="background: #F0FDF4; border: 1px solid #86EFAC; padding: 15px; border-radius: 8px;">
-                    <b style="color: #166534;">✓ Pre-Upgrade Preparation</b>
-                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #166534; font-size: 14px;">
-                        <li>Run Oracle EBS Upgrade Analyzer (RUP)</li>
-                        <li>Run Database Upgrade Analyzer for 19c</li>
-                        <li>Generate ETCC compliance report</li>
-                        <li>Document all custom code inventory</li>
-                    </ul>
-                </div>
-                <div style="background: #FEF3C7; border: 1px solid #FCD34D; padding: 15px; border-radius: 8px;">
-                    <b style="color: #92400E;">⚠ Technical Remediation</b>
-                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400E; font-size: 14px;">
-                        <li>Resolve all invalid objects</li>
-                        <li>Enable edition-based custom schemas</li>
-                        <li>Convert UTL_FILE_DIR to directories</li>
-                        <li>Test all database links connectivity</li>
-                    </ul>
-                </div>
-                <div style="background: #DBEAFE; border: 1px solid #93C5FD; padding: 15px; border-radius: 8px;">
-                    <b style="color: #1E40AF;">📋 Planning & Governance</b>
-                    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #1E40AF; font-size: 14px;">
-                        <li>Define cutover window requirements</li>
-                        <li>Plan minimum 3 rehearsal cycles</li>
-                        <li>Establish rollback procedures</li>
-                        <li>Coordinate with all integration teams</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <div id="risks" class="section">
-            <div class="section-header">
-                <h2>Risk Register & Mitigation Plan</h2>
-            </div>
-            <p>Based on the automated analysis, the following risks have been identified that may impact the upgrade project timeline or success.</p>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th>Risk ID</th>
-                        <th>Category</th>
-                        <th>Risk Description</th>
-                        <th>Severity</th>
-                        <th>Business Impact</th>
-                        <th>Mitigation Strategy</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><b>R02</b></td>
-                        <td>Infrastructure</td>
-                        <td>End-of-Life OS version detected</td>
-                        <td><span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: #FEF3C7; color: #92400E;">High</span></td>
-                        <td>Medium</td>
-                        <td>Include OS upgrade in project scope</td>
-                    </tr><tr>
-                        <td><b>R12</b></td>
-                        <td>Security</td>
-                        <td>SSO/OAM integration requires re-implementation</td>
-                        <td><span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: #FEF3C7; color: #92400E;">High</span></td>
-                        <td>High</td>
-                        <td>Engage security team early; plan WebGate upgrades</td>
                     </tr>
                 </tbody>
             </table>
@@ -810,5 +861,62 @@
         </div>
 
     </div>
+    
+    <script>
+        // ScrollSpy logic to highlight navigation sidebar
+        document.addEventListener('DOMContentLoaded', function() {
+            const sections = document.querySelectorAll('.section');
+            const navLinks = document.querySelectorAll('.nav-sidebar a');
+            const backToTop = document.getElementById('backToTop');
+            
+            window.addEventListener('scroll', () => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 100) {
+                        current = section.getAttribute('id');
+                    }
+                });
+
+                navLinks.forEach(link => {
+                    link.style.backgroundColor = '';
+                    link.style.color = '#555';
+                    link.style.borderLeftColor = 'transparent';
+                    if (link.getAttribute('href').includes(current) && current !== '') {
+                        link.style.backgroundColor = 'var(--light-blue)';
+                        link.style.color = 'var(--primary-blue)';
+                        link.style.borderLeftColor = 'var(--primary-blue)';
+                    }
+                });
+                
+                if (window.scrollY > 400) {
+                    backToTop.style.display = 'flex';
+                } else {
+                    backToTop.style.display = 'none';
+                }
+            });
+
+            // Global Subsection Collapsibility
+            const subheaders = document.querySelectorAll('.section h3');
+            subheaders.forEach(h3 => {
+                h3.style.cursor = 'pointer';
+                h3.innerHTML = '▼ ' + h3.innerHTML;
+                h3.addEventListener('click', function() {
+                    const isCollapsed = this.innerHTML.startsWith('▶');
+                    this.innerHTML = isCollapsed ? this.innerHTML.replace('▶', '▼') : this.innerHTML.replace('▼', '▶');
+                    
+                    let nextElem = this.nextElementSibling;
+                    while(nextElem && !['H3', 'H2'].includes(nextElem.tagName) && !nextElem.classList.contains('section-header')) {
+                        if (isCollapsed) {
+                            nextElem.style.display = '';
+                        } else {
+                            nextElem.style.display = 'none';
+                        }
+                        nextElem = nextElem.nextElementSibling;
+                    }
+                });
+            });
+        });
+    </script>
 </body>
 </html>
