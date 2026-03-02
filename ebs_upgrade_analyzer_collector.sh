@@ -45,6 +45,7 @@ echo "TOTAL_CPU_CORES|$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo)" 
 echo "TOTAL_MEMORY_GB|$(free -g | awk '/^Mem:/{print $2}')" >> $OUTPUT_FILE
 echo "[SECTION_END:OS_SERVER_INFO]" >> $OUTPUT_FILE
 
+{
 echo "[SECTION_START:OS_STORAGE_MOUNTS]"
 df -hP | awk 'NR>1 {print $1"|"$2"|"$3"|"$4"|"$5"|"$6}'
 echo "[SECTION_END:OS_STORAGE_MOUNTS]"
@@ -57,6 +58,7 @@ echo "[SECTION_END:OS_ULIMIT]"
 
 echo "2. Check Application Tier Rogue Files (OS Search)" | tee -a "$LOG_FILE"
 
+{
 echo "[SECTION_START:APP_CUSTOM_FILES]"
 if [ -n "$OA_HTML" ] && [ -d "$OA_HTML" ]; then
     echo "ROGUE_OA_HTML_B64|$(find "$OA_HTML" -iname '*b64*' 2>/dev/null | wc -l)"
@@ -74,7 +76,6 @@ echo "[SECTION_END:APP_CUSTOM_FILES]"
 echo "3. Creating SQL Payload for Deep-Dive Extraction" | tee -a "$LOG_FILE"
 
 cat << 'EOF' > run_db_collect.sql
-set term off
 set arraysize 200
 set heading off
 set feedback off  
@@ -131,15 +132,15 @@ from apps.fnd_nodes n,
            where status not in ('H') 
            group by node_name)
      ) c
-where n.node_name = c.node_name
+where lower(n.node_name) = lower(c.node_name)
 and n.node_name <> 'AUTHENTICATION';
 prompt [SECTION_END:ALL_NODES_CONTEXT]
 
 prompt [SECTION_START:EBS_INTEGRATIONS_PROFILES]
-SELECT fo.profile_option_name ||'|'|| fv.profile_option_value
-FROM apps.fnd_profile_option_values fv, apps.fnd_profile_options fo
-WHERE fo.profile_option_id = fv.profile_option_id 
-AND fv.level_value = 0
+SELECT fo.profile_option_name ||'|'|| NVL(fv.profile_option_value, 'NOT_DEFINED')
+FROM apps.fnd_profile_options fo, apps.fnd_profile_option_values fv
+WHERE fo.profile_option_id = fv.profile_option_id(+)
+AND fv.level_value(+) = 0
 AND (
     fo.profile_option_name LIKE '%APEX%' OR
     fo.profile_option_name LIKE '%SSO%' OR
@@ -210,17 +211,17 @@ and fpi.status in ('I', 'S');
 prompt [SECTION_END:EBS_LOCALIZATIONS]
 
 prompt [SECTION_START:TOP_50_CONC_PROGS_BY_EXEC]
-select * from (select fcp.concurrent_program_name ||'|'|| count(*) from apps.fnd_concurrent_requests fcr, apps.fnd_concurrent_programs fcp
+select * from (select fcp.user_concurrent_program_name ||'|'|| count(*) from apps.fnd_concurrent_requests fcr, apps.fnd_concurrent_programs_vl fcp
 where fcr.concurrent_program_id = fcp.concurrent_program_id and fcr.program_application_id = fcp.application_id
-and fcr.actual_start_date >= trunc(sysdate)-30 group by fcp.concurrent_program_name order by count(*) desc) where rownum <= 50;
+and fcr.actual_start_date >= trunc(sysdate)-30 group by fcp.user_concurrent_program_name order by count(*) desc) where rownum <= 50;
 prompt [SECTION_END:TOP_50_CONC_PROGS_BY_EXEC]
 
 prompt [SECTION_START:TOP_50_CONC_PROGS_BY_TIME]
-select * from (select fcp.concurrent_program_name ||'|'|| round(avg((fcr.actual_completion_date - fcr.actual_start_date)*24*60), 2)
-from apps.fnd_concurrent_requests fcr, apps.fnd_concurrent_programs fcp
+select * from (select fcp.user_concurrent_program_name ||'|'|| round(avg((fcr.actual_completion_date - fcr.actual_start_date)*24*60), 2)
+from apps.fnd_concurrent_requests fcr, apps.fnd_concurrent_programs_vl fcp
 where fcr.concurrent_program_id = fcp.concurrent_program_id and fcr.program_application_id = fcp.application_id
 and fcr.actual_start_date >= trunc(sysdate)-30 and fcr.actual_completion_date is not null
-group by fcp.concurrent_program_name order by avg((fcr.actual_completion_date - fcr.actual_start_date)*24*60) desc) where rownum <= 50;
+group by fcp.user_concurrent_program_name order by avg((fcr.actual_completion_date - fcr.actual_start_date)*24*60) desc) where rownum <= 50;
 prompt [SECTION_END:TOP_50_CONC_PROGS_BY_TIME]
 
 prompt [SECTION_START:CONC_MANAGER_QUEUE_STATUS]
@@ -249,11 +250,11 @@ from (select bytes from v$datafile union all select bytes from v$tempfile union 
 prompt [SECTION_END:DB_SIZE_USAGE_FREE]
 
 prompt [SECTION_START:EBS_CUSTOM_SCHEMAS]
-select username ||'|'|| created from dba_users where username like 'XX%' or username like 'CUST%';
+select username ||'|'|| created from dba_users where username like 'XX%' or username like 'XX%';
 prompt [SECTION_END:EBS_CUSTOM_SCHEMAS]
 
 prompt [SECTION_START:EBS_CUSTOM_OBJECTS]
-select owner ||'|'|| object_type ||'|'|| count(*) from dba_objects where owner like 'XX%' or owner like 'CUST%' group by owner, object_type;
+select owner ||'|'|| object_type ||'|'|| count(*) from dba_objects where owner like 'XX%' or owner like 'XX%' group by owner, object_type;
 prompt [SECTION_END:EBS_CUSTOM_OBJECTS]
 
 prompt [SECTION_START:EBS_ACTIVE_USERS]
@@ -265,7 +266,7 @@ select fa.application_short_name ||'|'|| count(distinct fu.user_id)
 from apps.fnd_user fu, apps.fnd_user_resp_groups_direct furg, apps.fnd_application fa
 where fu.user_id = furg.user_id and furg.responsibility_application_id = fa.application_id
 and (fu.end_date is null or fu.end_date > sysdate) and (furg.end_date is null or furg.end_date > sysdate)
-group by fa.application_short_name order by 2 desc;
+group by fa.application_short_name order by count(distinct fu.user_id) desc;
 prompt [SECTION_END:ACTIVE_USERS_BY_MODULE]
 
 prompt [SECTION_START:ACTIVE_USERS_BY_RESP]
@@ -274,7 +275,7 @@ from apps.fnd_user fu, apps.fnd_user_resp_groups_direct furg, apps.fnd_responsib
 where fu.user_id = furg.user_id and furg.responsibility_id = fr.responsibility_id
 and fu.user_id >= 1000
 and (fu.end_date is null or fu.end_date > sysdate) and (furg.end_date is null or furg.end_date > sysdate)
-group by fr.responsibility_key order by 2 desc;
+group by fr.responsibility_key order by count(distinct fu.user_id) desc;
 prompt [SECTION_END:ACTIVE_USERS_BY_RESP]
 
 prompt [SECTION_START:OPP_SIZING]
@@ -286,7 +287,7 @@ select count(*) from v$session where upper(module) like '%FORM%' or upper(progra
 prompt [SECTION_END:FORMS_SESSIONS]
 
 prompt [SECTION_START:DBA_DB_LINKS]
-select count(*), host from dba_db_links group by host;
+select count(*) ||'|'|| host from dba_db_links group by host;
 prompt [SECTION_END:DBA_DB_LINKS]
 
 prompt [SECTION_START:DBA_DIRECTORIES]
@@ -315,7 +316,7 @@ where fv.profile_option_id = fp.profile_option_id and fp.profile_option_name lik
 prompt [SECTION_END:FND_SMTP_PROFILES]
 
 prompt [SECTION_START:CUSTOM_WORKFLOWS]
-select name ||'|'|| count(*) from apps.wf_item_types where name like 'XX%' group by name;
+select name ||'|'|| name from apps.wf_item_types where name like 'XX%';
 prompt [SECTION_END:CUSTOM_WORKFLOWS]
 
 prompt [SECTION_START:XML_PUBLISHER_DELIVERY]
@@ -324,35 +325,26 @@ prompt [SECTION_END:XML_PUBLISHER_DELIVERY]
 
 
 prompt [SECTION_START:CEMLI_CONCURRENT_PROGRAMS]
-select fee.execution_method_code ||'|'|| decode(fee.execution_method_code, 'H', 'Host', 'J', 'Java SP', 'K', 'Java', 'P', 'Oracle Reports', 'E', 'Perl', 'Q', 'SQL*Plus', 'A', 'Spawned', 'I', 'PL/SQL', 'L', 'SQL*Loader', fee.execution_method_code) ||'|'|| count(*)
-from apps.fnd_executables fee, apps.fnd_concurrent_programs fcp
+select fa.application_short_name ||'|'|| fcp.concurrent_program_name ||'|'|| fee.executable_name ||'|'|| decode(fee.execution_method_code, 'H', 'Host', 'J', 'Java SP', 'K', 'Java', 'P', 'Oracle Reports', 'E', 'Perl', 'Q', 'SQL*Plus', 'A', 'Spawned', 'I', 'PL/SQL', 'L', 'SQL*Loader', fee.execution_method_code)
+from apps.fnd_executables fee, apps.fnd_concurrent_programs fcp, apps.fnd_application fa
 where fee.executable_id = fcp.executable_id
-and (fcp.concurrent_program_name like 'XX%' or fee.executable_name like 'XX%')
-group by fee.execution_method_code;
+and fcp.application_id = fa.application_id
+and (fcp.concurrent_program_name like 'XX%' or fee.executable_name like 'XX%');
 prompt [SECTION_END:CEMLI_CONCURRENT_PROGRAMS]
 
 prompt [SECTION_START:CEMLI_FORMS_AND_PAGES]
-select 'CUSTOM_FORMS' ||'|'|| count(*) from apps.fnd_form where form_name like 'XX%' or form_name like 'CUST%';
+select fa.application_short_name ||'|'|| form_name ||'|'|| user_form_name from apps.fnd_form_vl ff, apps.fnd_application fa 
+where ff.application_id = fa.application_id and (form_name like 'XX%' or form_name like 'XX%');
 prompt [SECTION_END:CEMLI_FORMS_AND_PAGES]
 
 prompt [SECTION_START:CEMLI_OAF_PERSONALIZATIONS]
-select 'OAF_PERSONALIZATIONS' ||'|'|| count(*) from apps.jdr_paths 
+select upper(regexp_substr(path_name, '^/oracle/apps/([^/]+)/', 1, 1, 'i', 1)) ||'|'|| path_name from apps.jdr_paths 
 where path_type = 'DOCUMENT' and (path_name like '/oracle/apps/%/customizations/%' or path_name like '%/XX%');
 prompt [SECTION_END:CEMLI_OAF_PERSONALIZATIONS]
 
-prompt [SECTION_START:AD_TXK_PATCH_LEVEL]
-select 'AD' ||'|'|| bug_number ||'|'|| creation_date from apps.ad_bugs where bug_number like '346%' or bug_number like '356%' or bug_number like '366%' and rownum <= 1
-union all
-select 'TXK' ||'|'|| bug_number ||'|'|| creation_date from apps.ad_bugs where bug_number like '345%' or bug_number like '355%' or bug_number like '365%' and rownum <= 1;
-prompt [SECTION_END:AD_TXK_PATCH_LEVEL]
-
-prompt [SECTION_START:RECENT_PATCHES]
-select patch_name ||'|'|| trunc(creation_date) from apps.ad_applied_patches where creation_date > sysdate - 180 and rownum <= 50 order by creation_date desc;
-prompt [SECTION_END:RECENT_PATCHES]
-
 prompt [SECTION_START:DB_INIT_PARAMS_FULL]
 select name ||'|'|| value ||'|'|| isdefault ||'|'|| ismodified 
-from v$system_parameter order by name;
+from v$system_parameter where isdefault='FALSE' order by name;
 prompt [SECTION_END:DB_INIT_PARAMS_FULL]
 
 prompt [SECTION_START:DB_INTERNAL_STATE]
@@ -371,17 +363,17 @@ from dba_feature_usage_statistics where currently_used = 'TRUE' and rownum <= 50
 prompt [SECTION_END:DB_FEATURE_USAGE]
 
 prompt [SECTION_START:CUSTOM_FND_OBJECTS]
-select 'MENUS' ||'|'|| count(*) from apps.fnd_menus where menu_name like 'XX%'
+select 'MENUS' ||'|'|| menu_name from apps.fnd_menus where menu_name like 'XX%'
 union all
-select 'RESPONSIBILITIES' ||'|'|| count(*) from apps.fnd_responsibility where responsibility_key like 'XX%'
+select 'RESPONSIBILITIES' ||'|'|| responsibility_key from apps.fnd_responsibility where responsibility_key like 'XX%'
 union all
-select 'FUNCTIONS' ||'|'|| count(*) from apps.fnd_form_functions where function_name like 'XX%'
+select 'FUNCTIONS' ||'|'|| function_name from apps.fnd_form_functions where function_name like 'XX%'
 union all
-select 'LOOKUPS' ||'|'|| count(distinct lookup_type) from apps.fnd_lookup_values where lookup_type like 'XX%'
+select 'LOOKUPS' ||'|'|| lookup_type from apps.fnd_lookup_types where lookup_type like 'XX%'
 union all
-select 'VALUE_SETS' ||'|'|| count(*) from apps.fnd_flex_value_sets where flex_value_set_name like 'XX%'
+select 'VALUE_SETS' ||'|'|| flex_value_set_name from apps.fnd_flex_value_sets where flex_value_set_name like 'XX%'
 union all
-select 'DFFS' ||'|'|| count(*) from apps.fnd_descriptive_flexs where descriptive_flexfield_name like 'XX%';
+select 'DFFS' ||'|'|| descriptive_flexfield_name from apps.fnd_descriptive_flexs where descriptive_flexfield_name like 'XX%';
 prompt [SECTION_END:CUSTOM_FND_OBJECTS]
 
 prompt [SECTION_START:INFRA_OBJECTS]
@@ -401,7 +393,7 @@ select 'AUDIT_TABLE_ROWS' ||'|'|| sum(num_rows) from dba_tables where table_name
 prompt [SECTION_END:WORKLOAD_STATISTICS]
 
 prompt [SECTION_START:ORACLE_ALERTS_LIST]
-select fa.application_short_name ||'|'|| a.alert_name ||'|'|| a.description ||'|'|| a.alert_condition_type ||'|'|| a.oracle_id
+select fa.application_short_name ||'|'|| a.alert_name ||'|'|| a.description ||'|'|| a.alert_condition_type
 from apps.alr_alerts a, apps.fnd_application fa 
 where a.application_id = fa.application_id and a.enabled_flag = 'Y';
 prompt [SECTION_END:ORACLE_ALERTS_LIST]
@@ -437,6 +429,10 @@ select fv.profile_option_value ||'|'|| fp.profile_option_name
 from apps.fnd_profile_option_values fv, apps.fnd_profile_options fp
 where fv.profile_option_id = fp.profile_option_id and fp.profile_option_name in ('NODE_TRUST_LEVEL', 'RESP_TRUST_LEVEL');
 prompt [SECTION_END:EBS_DMZ_EXTERNAL_NODES]
+
+prompt [SECTION_START:EBS_APEX_ORDS_VERSION]
+select comp_name ||'|'|| version ||'|'|| status from dba_registry where comp_id in ('APEX', 'ORDS');
+prompt [SECTION_END:EBS_APEX_ORDS_VERSION]
 
 prompt [SECTION_START:EBS_PCP_MANAGERS]
 select q.user_concurrent_queue_name ||'|'|| n1.node_name ||'|'|| nvl(n2.node_name, 'NO_FAILOVER_DEFINED')
@@ -504,7 +500,7 @@ prompt [SECTION_END:DB_CHARACTER_SET]
 
 prompt [SECTION_START:DB_TABLESPACES]
 select tablespace_name ||'|'|| round(sum(bytes)/1024/1024/1024,2) ||'|'|| status
-from dba_data_files group by tablespace_name, status order by 2 desc;
+from dba_data_files group by tablespace_name, status order by sum(bytes) desc;
 prompt [SECTION_END:DB_TABLESPACES]
 
 prompt [SECTION_START:DB_REDO_LOGS]
@@ -520,11 +516,11 @@ select * from (select name ||'|'|| detected_usages ||'|'|| currently_used from d
 prompt [SECTION_END:DB_FEATURES_USED]
 
 prompt [SECTION_START:INVALID_OBJECTS_DETAIL]
-select owner ||'|'|| object_type ||'|'|| count(*) from dba_objects where status = 'INVALID' and owner not in ('SYS','SYSTEM','WMSYS','XDB','CTXSYS','MDSYS','OLAPSYS','ORDDATA','ORDSYS') group by owner, object_type order by 3 desc;
+select owner ||'|'|| object_type ||'|'|| count(*) from dba_objects where status = 'INVALID' and owner not in ('SYS','SYSTEM','WMSYS','XDB','CTXSYS','MDSYS','OLAPSYS','ORDDATA','ORDSYS') group by owner, object_type order by count(*) desc;
 prompt [SECTION_END:INVALID_OBJECTS_DETAIL]
 
 prompt [SECTION_START:AD_REGISTERED_SCHEMAS]
-select oracle_username ||'|'|| read_only_flag from apps.ad_oracle_schemas order by oracle_username;
+select oracle_username ||'|'|| read_only_flag from apps.fnd_oracle_userid order by oracle_username;
 prompt [SECTION_END:AD_REGISTERED_SCHEMAS]
 
 prompt [SECTION_START:ONLINE_PATCHING_STATUS]
@@ -536,27 +532,27 @@ select patch_name ||'|'|| patch_type ||'|'|| to_char(creation_date,'YYYY-MM-DD')
 prompt [SECTION_END:AD_APPLIED_PATCHES_RECENT]
 
 prompt [SECTION_START:EBS_RESPONSIBILITIES]
-select count(*) ||'|'|| decode(end_date, null, 'ACTIVE', 'INACTIVE') from apps.fnd_responsibility where responsibility_key like 'XX%' or responsibility_key like 'CUST%' group by decode(end_date, null, 'ACTIVE', 'INACTIVE');
+select count(*) ||'|'|| decode(end_date, null, 'ACTIVE', 'INACTIVE') from apps.fnd_responsibility where responsibility_key like 'XX%' or responsibility_key like 'XX%' group by decode(end_date, null, 'ACTIVE', 'INACTIVE');
 prompt [SECTION_END:EBS_RESPONSIBILITIES]
 
 prompt [SECTION_START:CUSTOM_MENUS]
-select 'CUSTOM_MENUS' ||'|'|| count(*) from apps.fnd_menus where menu_name like 'XX%' or menu_name like 'CUST%';
+select menu_name from apps.fnd_menus where menu_name like 'XX%' or menu_name like 'CUST%';
 prompt [SECTION_END:CUSTOM_MENUS]
 
 prompt [SECTION_START:CUSTOM_FUNCTIONS]
-select 'CUSTOM_FUNCTIONS' ||'|'|| count(*) from apps.fnd_form_functions where function_name like 'XX%' or function_name like 'CUST%';
+select function_name from apps.fnd_form_functions where function_name like 'XX%' or function_name like 'CUST%';
 prompt [SECTION_END:CUSTOM_FUNCTIONS]
 
 prompt [SECTION_START:CUSTOM_LOOKUPS]
-select 'CUSTOM_LOOKUPS' ||'|'|| count(distinct lookup_type) from apps.fnd_lookup_values where lookup_type like 'XX%' or lookup_type like 'CUST%';
+select lookup_type from apps.fnd_lookup_types where lookup_type like 'XX%' or lookup_type like 'CUST%';
 prompt [SECTION_END:CUSTOM_LOOKUPS]
 
 prompt [SECTION_START:CUSTOM_VALUE_SETS]
-select 'CUSTOM_VALUE_SETS' ||'|'|| count(*) from apps.fnd_flex_value_sets where flex_value_set_name like 'XX%' or flex_value_set_name like 'CUST%';
+select flex_value_set_name from apps.fnd_flex_value_sets where flex_value_set_name like 'XX%' or flex_value_set_name like 'CUST%';
 prompt [SECTION_END:CUSTOM_VALUE_SETS]
 
 prompt [SECTION_START:CUSTOM_DFF]
-select 'DESCRIPTIVE_FLEXFIELDS' ||'|'|| count(*) from apps.fnd_descriptive_flexs_vl where descriptive_flexfield_name like 'XX%' or title like '%Custom%';
+select descriptive_flexfield_name from apps.fnd_descriptive_flexs_vl where descriptive_flexfield_name like 'XX%' or title like '%Custom%';
 prompt [SECTION_END:CUSTOM_DFF]
 
 prompt [SECTION_START:SCHEDULER_JOBS]
@@ -584,7 +580,10 @@ select timezone_code ||'|'|| enabled_flag from apps.fnd_timezones_b where enable
 prompt [SECTION_END:EBS_TIMEZONES]
 
 prompt [SECTION_START:EBS_TERRITORIES]
-select territory_code ||'|'|| count(*) as orgs from apps.hr_all_organization_units group by territory_code having count(*) > 0 order by 2 desc;
+select a.territory_code ||'|'|| count(*) as orgs 
+from apps.hr_all_organization_units o, apps.fnd_territories a 
+where o.location_id is not null and rownum <= 10 
+group by a.territory_code;
 prompt [SECTION_END:EBS_TERRITORIES]
 
 prompt [SECTION_START:CONCURRENT_REQUESTS_STATS]

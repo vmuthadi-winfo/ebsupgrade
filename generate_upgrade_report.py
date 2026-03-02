@@ -72,7 +72,23 @@ def render_table(rows, headers):
     html += '</tbody></table>'
     return html
 
-def determine_integrations(profiles):
+def render_drilldown_table(summary_text, rows, headers):
+    if not rows:
+         return f"<div style='margin-bottom: 5px; color:#555;'><b>{summary_text}</b> (0 items)</div>"
+    
+    html = f"""
+    <details style="margin-bottom: 10px; background: #fdfdfd; border: 1px solid #eee; border-radius: 6px; padding: 5px 10px;">
+        <summary style="cursor: pointer; font-weight: 600; color: #0A3A6B; outline: none;">
+            {summary_text} <span style="font-weight: normal; color: #666;">({len(rows)} items)</span>
+        </summary>
+        <div style="margin-top: 10px;">
+            {render_table(rows, headers)}
+        </div>
+    </details>
+    """
+    return html
+
+def determine_integrations(profiles, apex_ords_data):
     integ = {
         'SSO': {'status': 'Disabled', 'desc': 'No Oracle Access Manager or external SSO agents mapping detected. Standard FND login assumed.', 'color': '--border-grey', 'roadmap': 'Standard FND User migration.'},
         'APEX': {'status': 'Disabled', 'desc': 'No APEX listener links found in profiles.', 'color': '--border-grey', 'roadmap': 'N/A'},
@@ -94,27 +110,58 @@ def determine_integrations(profiles):
         if name == 'APPS_AUTH_AGENT': auth_agent = value
         
         if 'APEX' in name:
-            integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}. Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
+            if value == 'NOT_DEFINED':
+                integ['APEX'] = {'status': 'Not Configured', 'desc': 'APEX Profile exists but has no value at Site Level.', 'color': '--border-grey', 'roadmap': 'No action required.'}
+            else:
+                apex_ver = next((row[1] for row in apex_ords_data if len(row) > 1 and row[0] == 'Oracle Application Express'), 'Unknown')
+                ords_ver = next((row[1] for row in apex_ords_data if len(row) > 1 and row[0] == 'Oracle REST Data Services'), 'Unknown')
+                version_str = f"DB reports APEX v{apex_ver} and ORDS v{ords_ver}." if apex_ords_data and apex_ords_data[0][0] != 'N/A' else "Version data not found in registry."
+                integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}. {version_str} Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
+        
         if 'ECC' in name:
-            integ['ECC'] = {'status': 'Active', 'desc': 'Command Center profiles found.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
+            if value == 'NOT_DEFINED':
+                integ['ECC'] = {'status': 'Not Configured', 'desc': 'ECC Command Center Profiles exist but are blank.', 'color': '--border-grey', 'roadmap': 'Consider deploying ECC V12 for modern reporting.'}
+            else:
+                integ['ECC'] = {'status': 'Active', 'desc': 'Command Center profiles found.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
+        
         if 'SOA' in name or 'REST' in name or 'ISG' in name:
-            integ['SOA_ISG'] = {'status': 'Active', 'desc': 'SOA/ISG/REST detected. Integrated SOA Gateway has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
+            if value != 'NOT_DEFINED':
+                integ['SOA_ISG'] = {'status': 'Active', 'desc': 'SOA/ISG/REST detected. Integrated SOA Gateway has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
+        
         if 'OBIEE' in name or 'OAC' in name:
-            integ['OBIEE'] = {'status': 'Active', 'desc': 'OBIEE / OAC URL Profiles defined.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
+            if value != 'NOT_DEFINED':
+                integ['OBIEE'] = {'status': 'Active', 'desc': 'OBIEE / OAC URL Profiles defined.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
+        
         if 'ENDECA' in name:
-            integ['ENDECA'] = {'status': 'Active', 'desc': 'Endeca extensions detected.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
+            if value != 'NOT_DEFINED':
+                integ['ENDECA'] = {'status': 'Active', 'desc': 'Endeca extensions detected.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
+        
         if 'VERTEX' in name:
-            integ['VERTEX'] = {'status': 'Active', 'desc': 'Vertex Tax Integration.', 'color': '--danger-red', 'roadmap': 'Verify Vertex O series certification matrix for target OS and EBS 12.2.'}
+            if value != 'NOT_DEFINED':
+                integ['VERTEX'] = {'status': 'Active', 'desc': 'Vertex Tax Integration.', 'color': '--danger-red', 'roadmap': 'Verify Vertex O series certification matrix for target OS and EBS 12.2.'}
+        
         if 'AVALARA' in name:
-            integ['AVALARA'] = {'status': 'Active', 'desc': 'Avalara Tax engine detected.', 'color': '--warning-amber', 'roadmap': 'Migration effort required for Avalara integration testing.'}
+            if value != 'NOT_DEFINED':
+                integ['AVALARA'] = {'status': 'Active', 'desc': 'Avalara Tax engine detected.', 'color': '--warning-amber', 'roadmap': 'Migration effort required for Avalara integration testing.'}
+        
         if 'KBACE' in name:
-            integ['KBACE'] = {'status': 'Active', 'desc': 'KBACE integration mapping found.', 'color': '--warning-amber', 'roadmap': 'Dependent on modern WebLogic OS architectural dependencies.'}
+            if value != 'NOT_DEFINED':
+                integ['KBACE'] = {'status': 'Active', 'desc': 'KBACE integration mapping found.', 'color': '--warning-amber', 'roadmap': 'Dependent on modern WebLogic OS architectural dependencies.'}
+        
         if 'MARKVIEW' in name:
-            integ['MARKVIEW'] = {'status': 'Active', 'desc': 'Kofax Markview imaging system.', 'color': '--warning-amber', 'roadmap': 'Highly invasive AP Integration. Exhaustive regression testing required on target WLS tier.'}
+            if value != 'NOT_DEFINED':
+                integ['MARKVIEW'] = {'status': 'Active', 'desc': 'Kofax Markview imaging system.', 'color': '--warning-amber', 'roadmap': 'Highly invasive AP Integration. Exhaustive regression testing required on target WLS tier.'}
+        
         if 'GRC' in name:
-            integ['GRC'] = {'status': 'Active', 'desc': 'Oracle GRC (Governance Risk Compliance).', 'color': '--primary-blue', 'roadmap': 'Ensure AACG connectors map correctly against target OS versions.'}
-        if 'SSO' in name or 'OAM' in name:
-            integ['SSO'] = {'status': 'Active', 'desc': 'SSO/OAM configurations detected.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
+            if value != 'NOT_DEFINED':
+                integ['GRC'] = {'status': 'Active', 'desc': 'Oracle GRC (Governance Risk Compliance).', 'color': '--primary-blue', 'roadmap': 'Ensure AACG connectors map correctly against target OS versions.'}
+        
+        if 'SSO' in name or 'OAM' in name or name in ['APPS_AUTH_AGENT', 'FND_SSO_COOKIE_DOMAIN']:
+            if value == 'NOT_DEFINED':
+                 if integ['SSO']['status'] == 'Disabled': 
+                      integ['SSO'] = {'status': 'Not Configured', 'desc': f'SSO Profile ({name}) is present but blank. Standard FND login assumed.', 'color': '--border-grey', 'roadmap': 'Standard FND User migration.'}
+            else:
+                 integ['SSO'] = {'status': 'Active', 'desc': f'SSO/OAM configurations detected via {name}.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
             
     # Check if agents differ indicating external SSO
     if auth_agent and fwk_agent and auth_agent != fwk_agent:
@@ -242,9 +289,9 @@ def calculate_complexity_score(data, db_params, active_users, custom_objs, custo
     if custom_objs > 5000: cd4_score = 5
     elif custom_objs > 1000: cd4_score = 3
 
-    # CD-5: Integrations
+    db_links_list = safe_get(data, 'DBA_DB_LINKS', [])
+    db_links_count = len(db_links_list) if db_links_list and db_links_list[0][0] != 'N/A' else 0
     cd5_score = 0
-    db_links_count = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
     if db_links_count > 20: cd5_score = 5
     elif db_links_count > 5: cd5_score = 3
     
@@ -461,23 +508,33 @@ def build_html(data):
     all_nodes_context = safe_get(data, 'ALL_NODES_CONTEXT', [])
     db_params = safe_get(data, 'DB_PARAMETERS', [])
     
-    custom_schemas = len(safe_get(data, 'EBS_CUSTOM_SCHEMAS', []))
-    custom_objs = sum(int(row[2]) for row in safe_get(data, 'EBS_CUSTOM_OBJECTS', []) if len(row) > 2 and row[2].isdigit())
+    custom_schemas_data = safe_get(data, 'EBS_CUSTOM_SCHEMAS', [])
+    custom_schemas = len(custom_schemas_data) if custom_schemas_data and custom_schemas_data[0][0] != 'N/A' else 0
+    
+    custom_objs_data = safe_get(data, 'EBS_CUSTOM_OBJECTS', [])
+    custom_objs = len(custom_objs_data) if custom_objs_data and custom_objs_data[0][0] != 'N/A' else 0
     
     nodes = safe_get(data, 'EBS_NODES', [])
     profiles = safe_get(data, 'EBS_INTEGRATIONS_PROFILES', [])
-    integrations = determine_integrations(profiles)
+    apex_ords_info = safe_get(data, 'EBS_APEX_ORDS_VERSION', [])
+    integrations = determine_integrations(profiles, apex_ords_info)
     rules_challenges = run_prebuilt_rules(db_version_info[1] if len(db_version_info)>1 else '', ebs_version, db_params, os_info, db_size, data)
     
     # Process New Extracts
     invalid_objs_list = safe_get(data, 'DBA_INVALID_OBJECTS_LIST', [])
-    db_links = sum(int(row[0]) for row in safe_get(data, 'DBA_DB_LINKS', []) if row)
+    db_links_list = safe_get(data, 'DBA_DB_LINKS', [])
+    db_links = len(db_links_list) if db_links_list and db_links_list[0][0] != 'N/A' else 0
     directories = safe_get(data, 'DBA_DIRECTORIES', [['0']])[0][0]
 
     # Process CEMLI Details
     cemli_cp = safe_get(data, 'CEMLI_CONCURRENT_PROGRAMS', [])
-    forms_count = safe_get(data, 'CEMLI_FORMS_AND_PAGES', [['', '0']])[0][1]
-    oaf_count = safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', [['', '0']])[0][1]
+    
+    forms_data_raw = safe_get(data, 'CEMLI_FORMS_AND_PAGES', [])
+    forms_count = len(forms_data_raw) if forms_data_raw and forms_data_raw[0][0] != 'N/A' else 0
+    
+    oaf_data_raw = safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', [])
+    oaf_count = len(oaf_data_raw) if oaf_data_raw and oaf_data_raw[0][0] != 'N/A' else 0
+    
     oracle_alerts_list = safe_get(data, 'ORACLE_ALERTS_LIST', [])
     
     # Process Sizing Details
@@ -504,9 +561,7 @@ def build_html(data):
     scheduled_jobs = safe_get(data, 'SCHEDULED_CONCURRENT_JOBS', [])
     db_init_params = safe_get(data, 'DB_INIT_PARAMS_FULL', [])
     
-    # Process the 20+ New Deep-Dive Extractions
-    ad_txk_patch_level = safe_get(data, 'AD_TXK_PATCH_LEVEL', [])
-    recent_patches = safe_get(data, 'RECENT_PATCHES', [])
+    # Process the New Deep-Dive Extractions
     db_internal_state = safe_get(data, 'DB_INTERNAL_STATE', [])
     db_feature_usage = safe_get(data, 'DB_FEATURE_USAGE', [])
     custom_fnd_objects = safe_get(data, 'CUSTOM_FND_OBJECTS', [])
@@ -523,14 +578,10 @@ def build_html(data):
     users_created = safe_get(data, 'USERS_CREATED_MONTHLY', [])
     ebs_languages = safe_get(data, 'EBS_LANGUAGES', [])
     
-    # CEMLI counts from extracted data
-    forms_data_raw = safe_get(data, 'CEMLI_FORMS_AND_PAGES', [])
-    forms_count = forms_data_raw[0][1] if forms_data_raw and len(forms_data_raw[0]) > 1 else '0'
-    
-    oaf_data_raw = safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', [])
-    oaf_count = oaf_data_raw[0][1] if oaf_data_raw and len(oaf_data_raw[0]) > 1 else '0'
-    
-    cemli_cp = safe_get(data, 'CEMLI_CONCURRENT_PROGRAMS', [])
+    # CEMLI Object Data (for drilldowns)
+    custom_workflows = safe_get(data, 'CUSTOM_WORKFLOWS', [])
+    xml_publisher = safe_get(data, 'XML_PUBLISHER_DELIVERY', [])
+    custom_fnd = safe_get(data, 'CUSTOM_FND_OBJECTS', [])
     
     # Generate sizing analytics
     opp_data = safe_get(data, 'OPP_SIZING', [])
@@ -788,13 +839,21 @@ def build_html(data):
                 </div>
             </div>
 
-            <h3>Concurrent Program Technical Debt (Grouped by Engine)</h3>
+            <h3>Concurrent Program Technical Debt</h3>
             <p style="color:red; font-size:13px; font-weight:600; margin-top:0;">&#9888; Action Required: All 'Java' and 'Spawned' (C/C++) executables must be recompiled on the target OS.</p>
-            {render_table(cemli_cp, ["Execution Tech Stack", "Internal Engine", "Volumes Deployed"])}
+            {render_drilldown_table("Custom Concurrent Programs List", cemli_cp, ["Application Module", "Program Name", "Executable Name", "Execution Method"])}
             
+            <h3>Forms & OAF Modifications</h3>
+            {render_drilldown_table("Custom Oracle Forms (fmb)", safe_get(data, 'CEMLI_FORMS_AND_PAGES', []), ["Application Module", "Form Name", "User Form Name"])}
+            {render_drilldown_table("MDS OAF Personalizations", safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', []), ["Application Module", "JDR Path Name"])}
+
             <h3>Custom FND Configurations (Deep Dive)</h3>
             <p style="font-size:13px; color:#475569;">Includes menus, functions, responsibilities, lookups, and flexfields prefixed with XX% for rigorous application security mapping.</p>
-            {render_table(custom_fnd_objects, ["FND Object Dimension", "Instance Volume"])}
+            {render_drilldown_table("Custom Application Setup Configurations", custom_fnd, ["FND Object Type", "Object Name"])}
+
+            <h3>Other Customized Core Components</h3>
+            {render_drilldown_table("Custom Workflow Definitions", custom_workflows, ["Item Type", "Display Name"])}
+            {render_drilldown_table("BIP / XML Publisher Templates", xml_publisher, ["XML Template Code", "Output Type"])}
         </div>
 
         <div id="integrations" class="section">
@@ -986,13 +1045,6 @@ def build_html(data):
         
     html += f"""
             
-            <h3>Application AD / TXK Codebase Patch Level</h3>
-            <p style="font-size:13px; color:#475569;">Defines the absolute fundamental architectural requirement for Online Patching stability logic pre/post cutover.</p>
-            {render_table(ad_txk_patch_level, ["Lifecycle Release", "Patch Number", "Installation Trajectory"])}
-
-            <h3>Recent Environment Changes (Rolling 180 Days)</h3>
-            {render_table(recent_patches, ["Applied ADOP Patch", "Installation Timestamp"])}
-
             <h3>File-System Rogue Customizations (OS `find` extraction)</h3>
             <p style="font-size:13px; color:#475569;">Includes unmanaged `b64` web logic, rogue custom images missing personalization hooks, and manually dropped `.class` payloads in `$JAVA_TOP` missing standards.</p>
             {render_table(safe_get(data, 'APP_CUSTOM_FILES', []), ["File Search Target", "Discovered Quantity"])}
