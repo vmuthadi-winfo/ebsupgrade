@@ -1,3 +1,12 @@
+# ==============================================================================
+# Script Name: generate_upgrade_report.py
+# Description: Generates HTML report from EBS upgrade analyzer data
+#
+# Copyright (c) 2024-2026 Winfo Solutions. All Rights Reserved.
+# This tool is Winfo Solutions Proprietary and Confidential.
+# Unauthorized copying, distribution, or use of this file is strictly prohibited.
+# ==============================================================================
+
 import sys
 import os
 from datetime import datetime
@@ -88,6 +97,46 @@ def render_drilldown_table(summary_text, rows, headers):
     """
     return html
 
+def render_url_profiles_table(url_profiles):
+    """Render URL profiles with recommendations for upgrade."""
+    if not url_profiles or (len(url_profiles) == 1 and url_profiles[0][0] == 'N/A'):
+        return "<p style='color:#777; font-size:14px; font-style:italic;'>No URL profile data found.</p>"
+    
+    # Define recommendations for each profile
+    recommendations = {
+        'APPS_FRAMEWORK_AGENT': 'Update to new WebLogic managed server URL format. Must use HTTPS with valid SSL certificate in EBS 12.2.11+.',
+        'APPS_AUTH_AGENT': 'Configure for Oracle Access Manager integration or leave blank for standard FND authentication.',
+        'FND_APEX_URL': 'Update to APEX 23.x URL after deploying APEX on 19c/23ai database. ORDS must be configured separately.',
+        'FND_EXTERNAL_ADF_URL': 'Update ADF URL if external ADF applications are deployed. Validate WebLogic domain configuration.',
+        'INV_EBI_SERVER_URL': 'Update ISG (Integrated SOA Gateway) server URL for REST/SOAP service endpoints.',
+        'ICX_FORMS_LAUNCHER': 'Forms servlet URL - update to new WebLogic domain URL. Critical for Forms application launch.'
+    }
+    
+    html = '<table><thead><tr><th>Profile Name</th><th>Current Value</th><th style="width:40%;">Upgrade Recommendation</th></tr></thead><tbody>'
+    
+    for row in url_profiles:
+        if len(row) < 2:
+            continue
+        profile_name = row[0] if row[0] else ''
+        profile_value = row[1] if row[1] else 'NOT_DEFINED'
+        recommendation = recommendations.get(profile_name, 'Review and update as needed post-upgrade.')
+        
+        # Determine status color
+        if profile_value == 'NOT_DEFINED' or not profile_value.strip():
+            status_style = 'background:#FEF3C7; color:#92400E;'
+            value_display = '<span style="color:#92400E; font-style:italic;">Not Configured</span>'
+        elif 'http://' in profile_value.lower():
+            status_style = 'background:#FEE2E2; color:#991B1B;'
+            value_display = f'{profile_value} <br/><span style="color:#991B1B; font-size:12px;">⚠️ HTTP - Should use HTTPS</span>'
+        else:
+            status_style = 'background:#D1FAE5; color:#065F46;'
+            value_display = profile_value
+        
+        html += f'<tr><td style="font-weight:600;">{profile_name}</td><td style="{status_style}">{value_display}</td><td style="font-size:13px;">{recommendation}</td></tr>'
+    
+    html += '</tbody></table>'
+    return html
+
 def determine_integrations(profiles, apex_ords_data):
     integ = {
         'SSO': {'status': 'Disabled', 'desc': 'No Oracle Access Manager or external SSO agents mapping detected. Standard FND login assumed.', 'color': '--border-grey', 'roadmap': 'Standard FND User migration.'},
@@ -100,45 +149,64 @@ def determine_integrations(profiles, apex_ords_data):
     
     fwk_agent = ""
     auth_agent = ""
+    sso_mode = ""
+    endeca_active_count = 0
 
     for row in profiles:
         if len(row) < 2: continue
-        name, value = row[0].upper(), row[1]
+        name = row[0].upper() if row[0] else ''
+        value = row[1] if row[1] else ''
         if not value.strip(): continue
 
         if name == 'APPS_FRAMEWORK_AGENT': fwk_agent = value
         if name == 'APPS_AUTH_AGENT': auth_agent = value
+        if name == 'APPS_SSO': sso_mode = value.upper() if value else ''  # Track SSO mode - SSWA means standard login
         
-        if 'APEX' in name:
+        # APEX detection - only FND_APEX_URL with actual URL value
+        if name == 'FND_APEX_URL':
             if value == 'NOT_DEFINED':
                 integ['APEX'] = {'status': 'Not Configured', 'desc': 'APEX Profile exists but has no value at Site Level.', 'color': '--border-grey', 'roadmap': 'No action required.'}
             else:
                 apex_ver = next((row[1] for row in apex_ords_data if len(row) > 1 and row[0] == 'Oracle Application Express'), 'Unknown')
                 ords_ver = next((row[1] for row in apex_ords_data if len(row) > 1 and row[0] == 'Oracle REST Data Services'), 'Unknown')
                 version_str = f"DB reports APEX v{apex_ver} and ORDS v{ords_ver}." if apex_ords_data and apex_ords_data[0][0] != 'N/A' else "Version data not found in registry."
-                integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}. {version_str} Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
+                integ['APEX'] = {'status': 'Active', 'desc': f'Active via {name}={value}. {version_str} Custom code and APEX Listeners require testing across 19c/23ai.', 'color': '--warning-amber', 'roadmap': 'APEX 23.x must be deployed on the target database, and ORDS configured on a standalone Weblogic/Tomcat server.'}
         
-        if 'ECC' in name:
+        # ECC detection - specific profiles for Enterprise Command Center
+        ecc_profiles = ['FND_ENDECA_PORTAL_URL', 'FND_ENDECA_INTEGRATOR_URL']
+        if name in ecc_profiles:
             if value == 'NOT_DEFINED':
                 integ['ECC'] = {'status': 'Not Configured', 'desc': 'ECC Command Center Profiles exist but are blank.', 'color': '--border-grey', 'roadmap': 'Consider deploying ECC V12 for modern reporting.'}
             else:
-                integ['ECC'] = {'status': 'Active', 'desc': 'Command Center profiles found.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
+                integ['ECC'] = {'status': 'Active', 'desc': f'Command Center configured via {name}.', 'color': '--primary-blue', 'roadmap': 'Requires upgrading the ECC standalone server to V10+ (V12 Recommended) to certify with EBS 12.2.14/15.'}
         
-        if 'SOA' in name or 'REST' in name or 'ISG' in name:
+        # SOA/ISG detection - specific profiles that indicate actual ISG/REST service usage
+        isg_profiles = ['FND_SOA_GENERIC_SERVICE_WSDL', 'INV_EBI_SERVER_URL', 'INV_EBI_SOASERVER_USER', 'PA_EBI_SOASERVER_USER']
+        if name in isg_profiles:
             if value != 'NOT_DEFINED':
-                integ['SOA_ISG'] = {'status': 'Active', 'desc': 'SOA/ISG/REST detected. Integrated SOA Gateway has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
+                integ['SOA_ISG'] = {'status': 'Active', 'desc': f'Integrated SOA Gateway detected via {name}. ISG has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
         
-        if 'OBIEE' in name or 'OAC' in name:
-            if value != 'NOT_DEFINED':
-                integ['OBIEE'] = {'status': 'Active', 'desc': 'OBIEE / OAC URL Profiles defined.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
+        # OBIEE detection - specific profiles
+        if name in ['FND_OBIEE_URL', 'HRI_IMPL_OBIEE']:
+            value_upper = value.upper() if value else ''
+            if value != 'NOT_DEFINED' and value_upper not in ['N', 'NO']:
+                integ['OBIEE'] = {'status': 'Active', 'desc': f'OBIEE/OAC configured via {name}={value}.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
         
-        if 'ENDECA' in name:
-            if value != 'NOT_DEFINED':
-                integ['ENDECA'] = {'status': 'Active', 'desc': 'Endeca extensions detected.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
+        # ENDECA detection - profiles that indicate actual Endeca usage (not just existence of profile)
+        # Only count profiles that have real values (not NOT_DEFINED)
+        endeca_active_profiles = [
+            'HR_EXTENSION_FOR_ENDECA', 'HZ_ENDECA_DISPLAY_CURRENCY', 'CN_ENDECA_VIEW_PERIOD',
+            'ONT_ENDECA_DISPLAY_CURRENCY', 'ONT_ENDECA_ADDL_INFO', 'AHL_ENDECA_HISTORICAL_TRANSACTION',
+            'CS_ENDECA_SR_LOAD_START_DATE', 'USE_WO_ORG_FOR_EAM_ENDECA_SECURITY'
+        ]
+        value_upper = value.upper() if value else ''
+        if name in endeca_active_profiles and value != 'NOT_DEFINED' and value_upper not in ['N', 'NO', 'NONE']:
+            endeca_active_count += 1
         
-        if 'VERTEX' in name:
+        # VERTEX detection
+        if name in ['HR_US_VERTEX_WEB_SERVICE_HOST', 'HR_US_VERTEX_WEB_SERVICE_PORT']:
             if value != 'NOT_DEFINED':
-                integ['VERTEX'] = {'status': 'Active', 'desc': 'Vertex Tax Integration.', 'color': '--danger-red', 'roadmap': 'Verify Vertex O series certification matrix for target OS and EBS 12.2.'}
+                integ['VERTEX'] = {'status': 'Active', 'desc': f'Vertex Tax Integration detected via {name}.', 'color': '--danger-red', 'roadmap': 'Verify Vertex O series certification matrix for target OS and EBS 12.2.'}
         
         if 'AVALARA' in name:
             if value != 'NOT_DEFINED':
@@ -156,20 +224,24 @@ def determine_integrations(profiles, apex_ords_data):
             if value != 'NOT_DEFINED':
                 integ['GRC'] = {'status': 'Active', 'desc': 'Oracle GRC (Governance Risk Compliance).', 'color': '--primary-blue', 'roadmap': 'Ensure AACG connectors map correctly against target OS versions.'}
         
-        sso_profiles = [
-            'APPS_AUTH_AGENT', 'FND_SSO_COOKIE_DOMAIN', 'APPS_SSO_COOKIE_DOMAIN',
-            'APPS_SSO_PROFILE', 'APPS_SSO_AUTO_REDIRECT', 'APPS_OAM_APPL_SERVER_URL'
-        ]
-        if name in sso_profiles:
-            if value == 'NOT_DEFINED':
-                 if integ['SSO']['status'] == 'Disabled': 
-                      integ['SSO'] = {'status': 'Not Configured', 'desc': f'SSO Profile ({name}) is present but blank. Standard FND login assumed.', 'color': '--border-grey', 'roadmap': 'Standard FND User migration.'}
-            else:
-                 integ['SSO'] = {'status': 'Active', 'desc': f'SSO/OAM configurations detected via {name}.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
+        # SSO detection - specific profiles that indicate OAM/external SSO (not SSWA standard login)
+        oam_sso_profiles = ['APPS_OAM_APPL_SERVER_URL', 'FND_SSO_COOKIE_DOMAIN', 'APPS_SSO_COOKIE_DOMAIN', 'APPS_SSO_PROFILE']
+        if name in oam_sso_profiles and value != 'NOT_DEFINED':
+            integ['SSO'] = {'status': 'Active', 'desc': f'OAM/SSO configurations detected via {name}.', 'color': '--warning-amber', 'roadmap': 'Requires deploying Oracle Access Gate 1.2.3+ on Weblogic 10.3.6 (or OHS 12c Webgates) certified against the new Linux 9 OS.'}
+    
+    # Set ENDECA status based on count of active profiles
+    if endeca_active_count >= 2:
+        integ['ENDECA'] = {'status': 'Active', 'desc': f'{endeca_active_count} Endeca-related profiles with values detected. Information Discovery may be in use.', 'color': '--danger-red', 'roadmap': 'Oracle Endeca Information Discovery is functionally replaced by ECC in 12.2. Migration effort to ECC recommended.'}
+    elif endeca_active_count == 1:
+        integ['ENDECA'] = {'status': 'Partial', 'desc': 'Limited Endeca profile configuration found.', 'color': '--warning-amber', 'roadmap': 'Verify if Endeca Information Discovery is actively used. Consider ECC migration.'}
             
-    # Check if agents differ indicating external SSO
-    if auth_agent and fwk_agent and auth_agent != fwk_agent:
-         integ['SSO'] = {'status': 'Active', 'desc': 'Potential SSO / Access Gate detected via disjointed Auth & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
+    # Check if agents differ indicating external SSO (only if auth_agent has a real value)
+    if auth_agent and auth_agent != 'NOT_DEFINED' and fwk_agent and auth_agent != fwk_agent:
+        integ['SSO'] = {'status': 'Active', 'desc': 'External SSO detected via disjointed Auth & Framework Agents.', 'color': '--warning-amber', 'roadmap': 'Verify SSO Trust architecture prior to upgrading.'}
+    
+    # Set SSO to Standard only if it's still Disabled and APPS_SSO=SSWA (don't override Active or other states)
+    if sso_mode == 'SSWA' and integ['SSO']['status'] == 'Disabled':
+        integ['SSO'] = {'status': 'Standard', 'desc': 'APPS_SSO=SSWA indicates standard EBS Self-Service login. No external SSO/OAM integration.', 'color': '--border-grey', 'roadmap': 'Standard FND User migration with no SSO dependencies.'}
 
     return integ
 
@@ -226,44 +298,234 @@ def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size, dat
 
     return challenges
 
-def build_roadmap():
-    return """
+def build_roadmap(ebs_version, db_version, is_rac, has_dataguard):
+    """Build dynamic upgrade roadmap based on source environment."""
+    
+    # Determine source state
+    is_ebs_1213 = '12.1' in str(ebs_version) or '1213' in str(ebs_version).replace('.', '')
+    is_ebs_1220 = '12.2.0' in str(ebs_version)
+    is_db_11g = '11' in str(db_version)
+    is_db_12c = '12' in str(db_version)
+    
+    # Build complexity indicators
+    complexity_factors = []
+    if is_ebs_1213:
+        complexity_factors.append("EBS 12.1.3 → 12.2 upgrade (Major architectural change)")
+    if is_db_11g:
+        complexity_factors.append("Database 11g → 19c upgrade (2 major version jumps)")
+    if is_rac:
+        complexity_factors.append("RAC cluster coordination required")
+    if has_dataguard:
+        complexity_factors.append("Data Guard standby recreation needed")
+    
+    complexity_html = ""
+    if complexity_factors:
+        complexity_html = """
+        <div style="background:#FEF3C7; border-left:4px solid #F59E0B; padding:15px; margin-bottom:20px; border-radius:6px;">
+            <strong style="color:#92400E;">⚠️ Complexity Factors Identified:</strong>
+            <ul style="margin:10px 0 0 20px; color:#92400E;">
+        """
+        for factor in complexity_factors:
+            complexity_html += f"<li>{factor}</li>"
+        complexity_html += "</ul></div>"
+    
+    # RAC-specific considerations
+    rac_html = ""
+    if is_rac:
+        rac_html = """
+        <div style="background:#E0F2FE; border-left:4px solid #0284C7; padding:15px; margin:20px 0; border-radius:6px;">
+            <strong style="color:#0369A1;">🔄 RAC Cluster Considerations:</strong>
+            <ul style="margin:10px 0 0 20px; color:#0369A1;">
+                <li>All RAC instances must be shut down during database upgrade</li>
+                <li>ASM disk groups require validation post-upgrade</li>
+                <li>OCR/Voting disks backup recommended before upgrade</li>
+                <li>Grid Infrastructure upgrade may be required (19c GI for 19c RAC)</li>
+                <li>SCAN listeners must be reconfigured for new cluster</li>
+                <li>Recommend upgrading to RAC with 19c RU latest patch</li>
+            </ul>
+        </div>
+        """
+    
+    # Data Guard considerations
+    dg_html = ""
+    if has_dataguard:
+        dg_html = """
+        <div style="background:#F0FDF4; border-left:4px solid #22C55E; padding:15px; margin:20px 0; border-radius:6px;">
+            <strong style="color:#166534;">🛡️ Data Guard Standby Considerations:</strong>
+            <ul style="margin:10px 0 0 20px; color:#166534;">
+                <li>Standby database must be recreated after primary upgrade</li>
+                <li>Physical standby: Use RMAN duplicate or restore from backup</li>
+                <li>Logical standby: Requires complete rebuild from upgraded primary</li>
+                <li>Data Guard Broker configuration needs reconfiguration</li>
+                <li>Consider temporary DR gap during cutover weekend</li>
+                <li>Fast-Start Failover should be disabled during upgrade</li>
+            </ul>
+        </div>
+        """
+    
+    return f"""
+    {complexity_html}
+    
+    <h3>Upgrade Approach Overview</h3>
+    <p style="font-size:14px; color:#475569;">The following phased approach addresses the transition from your current environment to the target Oracle EBS 12.2.15 on Database 19c architecture.</p>
+    
     <div class="roadmap-timeline">
         <div class="rm-step">
             <div class="rm-badge">Ph 1</div>
             <div>
-                <strong>Infrastructure & Technical Stack </strong><br>
-                Deploy Oracle Linux 9 / RHEL 9. Install Oracle Database 19c (19.x) binary in Multitenant architecture (CDB).
+                <strong>Infrastructure & Technical Stack</strong><br>
+                Deploy Oracle Linux 8/9 (RHEL 8/9). Install Oracle Database 19c binary in Multitenant architecture (CDB). 
+                {'<span style="color:#DC2626;">(Current DB 11g requires direct to 19c upgrade path)</span>' if is_db_11g else ''}
             </div>
         </div>
         <div class="rm-step">
             <div class="rm-badge">Ph 2</div>
             <div>
                 <strong>Database Upgrade & Migration</strong><br>
-                Migrate the EBS Database into the 19c PDB. Convert <code>UTL_FILE_DIR</code> logic. Migrate character sets to AL32UTF8 (if needed).
+                {'Upgrade from 11g to 19c using AutoUpgrade or DBUA. ' if is_db_11g else 'Upgrade from 12c to 19c using AutoUpgrade. '}
+                Migrate into 19c PDB. Convert <code>UTL_FILE_DIR</code> to Oracle Directories. Migrate character sets to AL32UTF8 (if needed).
             </div>
         </div>
         <div class="rm-step">
             <div class="rm-badge">Ph 3</div>
             <div>
-                <strong>Application Upgrade (12.2.0 Base)</strong><br>
-                Rapid Install the 12.2 File System via DB upgrade mode. This lays down the dual-file system and Weblogic Server (WLS 10.3.6). Enable Online Patching (EBR).
+                <strong>Application Upgrade {'(12.1.3 → 12.2.0 Base)' if is_ebs_1213 else '(12.2.0 Base)'}</strong><br>
+                {'Major version upgrade from 12.1.3 to 12.2.0 using AD leveling scripts. ' if is_ebs_1213 else ''}
+                Rapid Install the 12.2 File System via DB upgrade mode. Deploy dual-file system and WebLogic Server (WLS 10.3.6). Enable Online Patching (EBR).
             </div>
         </div>
         <div class="rm-step">
             <div class="rm-badge">Ph 4</div>
             <div>
                 <strong>CEMLI Remediation (Customizations)</strong><br>
-                Apply Online Patching logical columns to all custom tables. Re-compile Java/C executables natively on Linux 9. Remediate custom PL/SQL to Edition-based standards.
+                Apply Online Patching logical columns to all custom tables. Re-compile Java/C executables natively on target OS. Remediate custom PL/SQL to Edition-based standards. Validate all custom objects.
             </div>
         </div>
         <div class="rm-step">
             <div class="rm-badge">Ph 5</div>
             <div>
                 <strong>Continuous Innovation (12.2.14 / 12.2.15)</strong><br>
-                Apply the latest AD/TXK Delta packs in the run edition. Apply the 12.2.15 Release Update Pack (RUP). Re-integrate SSO, OAC, and ISG endpoints.
+                Apply the latest AD/TXK Delta packs in the run edition. Apply the 12.2.15 Release Update Pack (RUP). Re-integrate SSO, OAC, and ISG endpoints. Validate all integrations.
             </div>
         </div>
+    </div>
+    
+    {rac_html}
+    {dg_html}
+    
+    <h3>High-Level 15-Step Upgrade Activity Summary</h3>
+    <p style="font-size:13px; color:#475569;">The following activities represent the critical path for completing a successful EBS upgrade project:</p>
+    
+    <table style="font-size:13px;">
+        <thead>
+            <tr>
+                <th style="width:50px;">Step</th>
+                <th style="width:150px;">Phase</th>
+                <th>Activity Description</th>
+                <th style="width:100px;">Duration Est.</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">1</td>
+                <td>Planning</td>
+                <td><strong>Discovery & Assessment</strong> - Complete CEMLI inventory, identify customizations, integrations, and technical dependencies</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">2</td>
+                <td>Planning</td>
+                <td><strong>Environment Sizing</strong> - Define target infrastructure requirements for OL8/9, 19c DB, WLS, and storage needs</td>
+                <td>1 week</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">3</td>
+                <td>Infrastructure</td>
+                <td><strong>Target Environment Build</strong> - Provision new servers with Oracle Linux 8/9, configure network, storage, and prerequisites</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">4</td>
+                <td>Infrastructure</td>
+                <td><strong>Database Software Installation</strong> - Install Oracle Database 19c software, create CDB container database{'<br><span style="color:#DC2626;">+ Grid Infrastructure for RAC</span>' if is_rac else ''}</td>
+                <td>1 week</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">5</td>
+                <td>Database</td>
+                <td><strong>Database Upgrade/Migration</strong> - Upgrade {'11g' if is_db_11g else '12c'} database to 19c using AutoUpgrade, plug into CDB as PDB</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">6</td>
+                <td>Database</td>
+                <td><strong>Database Post-Upgrade Tasks</strong> - Apply latest 19c RU patch, validate parameters, configure TDE (if required), test connectivity</td>
+                <td>3-5 days</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">7</td>
+                <td>Application</td>
+                <td><strong>EBS 12.2 Rapid Install</strong> - Install EBS 12.2 application tier file system, configure WebLogic domain, enable dual-filesystem</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">8</td>
+                <td>Application</td>
+                <td><strong>Online Patching Enablement</strong> - Enable EBR (Edition-Based Redefinition), configure ADOP, validate patching cycle</td>
+                <td>3-5 days</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">9</td>
+                <td>Application</td>
+                <td><strong>Apply Release Update Pack</strong> - Apply AD/TXK Delta packs and 12.2.14/12.2.15 RUP using ADOP patching</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">10</td>
+                <td>CEMLI</td>
+                <td><strong>Custom Schema Registration</strong> - Register all custom schemas with AD_ZD, apply EBR enablement to custom tables</td>
+                <td>1 week</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">11</td>
+                <td>CEMLI</td>
+                <td><strong>Custom Code Remediation</strong> - Recompile Forms/Reports, remediate PL/SQL for EBR, rebuild Java/OAF components on new JDK</td>
+                <td>2-4 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">12</td>
+                <td>Integration</td>
+                <td><strong>Integration Re-Configuration</strong> - Reconfigure SSO, ISG, APEX, ECC, and third-party integrations on new WLS tier</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">13</td>
+                <td>Testing</td>
+                <td><strong>Functional Testing</strong> - Execute business process testing across all modules, validate reports and outputs</td>
+                <td>2-4 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">14</td>
+                <td>Testing</td>
+                <td><strong>Performance Testing</strong> - Load testing, concurrent processing validation, Forms/UI response times{'<br><span style="color:#0284C7;">+ RAC workload balancing</span>' if is_rac else ''}</td>
+                <td>1-2 weeks</td>
+            </tr>
+            <tr>
+                <td style="text-align:center; font-weight:bold;">15</td>
+                <td>Cutover</td>
+                <td><strong>Production Cutover</strong> - Final data sync, cutover execution, go-live validation, hypercare support{'<br><span style="color:#22C55E;">+ Data Guard standby rebuild</span>' if has_dataguard else ''}</td>
+                <td>1 weekend</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div style="background:#F1F5F9; border-radius:8px; padding:20px; margin-top:20px;">
+        <h4 style="margin-top:0; color:#0F172A;">📊 Estimated Total Project Duration</h4>
+        <p style="margin:0; font-size:14px;">
+            <strong>Typical Range:</strong> 4-6 months (depending on CEMLI complexity and integration scope)<br>
+            <strong>Mock Cycles:</strong> 2-3 full upgrade rehearsals recommended before production cutover<br>
+            <strong>Cutover Window:</strong> 48-72 hours recommended for production migration
+        </p>
     </div>
     """
 
@@ -366,7 +628,7 @@ def calculate_effort_estimation(complexity_payload, custom_objs, db_size, active
         effort['cemli'] = int(effort['cemli'] * 1.2)
         
     # Adjust DB based on size
-    db_size_gb = float(db_size) if db_size else 0
+    db_size_gb = safe_float(db_size, 0)
     if db_size_gb > 3000:
         effort['db'] = int(effort['db'] * 1.5)
     elif db_size_gb > 1500:
@@ -534,6 +796,30 @@ def build_html(data):
     db_links = len(db_links_list) if db_links_list and db_links_list[0][0] != 'N/A' else 0
     directories = safe_get(data, 'DBA_DIRECTORIES', [['0']])[0][0]
 
+    # Process RAC Database Information
+    rac_status = safe_get(data, 'RAC_STATUS', [])
+    rac_instances = safe_get(data, 'RAC_INSTANCES', [])
+    rac_instance_params = safe_get(data, 'RAC_INSTANCE_PARAMETERS', [])
+    rac_interconnect = safe_get(data, 'RAC_INTERCONNECT', [])
+    rac_services = safe_get(data, 'RAC_SERVICES', [])
+    rac_database_info = safe_get(data, 'RAC_DATABASE_INFO', [])
+    rac_asm_diskgroups = safe_get(data, 'RAC_ASM_DISKGROUPS', [])
+    rac_gv_sysstat = safe_get(data, 'RAC_GV_SYSSTAT', [])
+    rac_thread_redo = safe_get(data, 'RAC_THREAD_REDO', [])
+    rac_scan_listeners = safe_get(data, 'RAC_SCAN_LISTENERS', [])
+    
+    # Determine if database is RAC
+    is_rac = False
+    rac_instance_count = 1
+    for row in rac_status:
+        if len(row) >= 2 and row[0] == 'CLUSTER_DATABASE' and row[1].upper() == 'TRUE':
+            is_rac = True
+        if len(row) >= 2 and row[0] == 'INSTANCE_COUNT':
+            try:
+                rac_instance_count = int(row[1])
+            except (ValueError, TypeError):
+                rac_instance_count = 1
+
     # Process CEMLI Details
     cemli_cp = safe_get(data, 'CEMLI_CONCURRENT_PROGRAMS', [])
     
@@ -552,6 +838,7 @@ def build_html(data):
     
     # Process New Advanced Extractions
     db_dataguard = safe_get(data, 'DB_DATAGUARD', [])
+    has_dataguard = len(db_dataguard) > 0 and len(db_dataguard[0]) > 0 and db_dataguard[0][0] != 'N/A'
     db_backups = safe_get(data, 'DB_BACKUP_SUMMARY', [])
     top_10_tables = safe_get(data, 'TOP_10_TABLES', [])
     user_profiles = safe_get(data, 'DB_USER_PROFILES', [])
@@ -586,6 +873,85 @@ def build_html(data):
     users_created = safe_get(data, 'USERS_CREATED_MONTHLY', [])
     ebs_languages = safe_get(data, 'EBS_LANGUAGES', [])
     
+    # EBS URL Profiles for recommendations
+    ebs_url_profiles = safe_get(data, 'EBS_URL_PROFILES', [])
+    
+    # New data extractions from Original Files queries
+    active_users_with_resp = safe_get(data, 'ACTIVE_USERS_WITH_RESPONSIBILITIES', [])
+    applied_patches_90_days = safe_get(data, 'APPLIED_PATCHES_90_DAYS', [])
+    top_100_conc_by_exec = safe_get(data, 'TOP_100_CONC_PROGS_BY_EXEC', [])
+    top_100_conc_by_time = safe_get(data, 'TOP_100_CONC_PROGS_BY_AVG_TIME', [])
+    
+    # Flagged files for upgrade analysis
+    flagged_files = safe_get(data, 'FLAGGED_FILES_FOR_UPGRADE', [])
+    custom_top_files = safe_get(data, 'CUSTOM_TOP_FILES', [])
+    ad_files_by_type = safe_get(data, 'AD_FILES_BY_TYPE', [])
+    patched_files_recent = safe_get(data, 'PATCHED_FILES_RECENT', [])
+    
+    # CEMLI Extract: Custom Application Objects
+    cemli_custom_apps = safe_get(data, 'CEMLI_CUSTOM_APPLICATIONS', [])
+    cemli_custom_alerts = safe_get(data, 'CEMLI_CUSTOM_ALERTS', [])
+    cemli_conc_host = safe_get(data, 'CEMLI_CONC_PROG_HOST', [])
+    cemli_conc_java = safe_get(data, 'CEMLI_CONC_PROG_JAVA', [])
+    cemli_conc_reports = safe_get(data, 'CEMLI_CONC_PROG_REPORTS', [])
+    cemli_conc_sqlloader = safe_get(data, 'CEMLI_CONC_PROG_SQLLOADER', [])
+    cemli_conc_sqlplus = safe_get(data, 'CEMLI_CONC_PROG_SQLPLUS', [])
+    
+    # CEMLI Extract: Custom OAF and FND Objects
+    cemli_oaf_pages = safe_get(data, 'CEMLI_OAF_PAGES', [])
+    cemli_oaf_personalizations = safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', [])
+    cemli_lookups = safe_get(data, 'CEMLI_LOOKUPS', [])
+    cemli_menus = safe_get(data, 'CEMLI_MENUS', [])
+    cemli_messages = safe_get(data, 'CEMLI_MESSAGES', [])
+    cemli_profiles = safe_get(data, 'CEMLI_PROFILES', [])
+    cemli_request_groups = safe_get(data, 'CEMLI_REQUEST_GROUPS', [])
+    cemli_request_sets = safe_get(data, 'CEMLI_REQUEST_SETS', [])
+    cemli_value_sets = safe_get(data, 'CEMLI_VALUE_SETS', [])
+    
+    # CEMLI Extract: Custom Database Objects
+    cemli_db_functions = safe_get(data, 'CEMLI_DB_FUNCTIONS', [])
+    cemli_db_indexes = safe_get(data, 'CEMLI_DB_INDEXES', [])
+    cemli_db_lobs = safe_get(data, 'CEMLI_DB_LOBS', [])
+    cemli_db_packages = safe_get(data, 'CEMLI_DB_PACKAGES', [])
+    cemli_db_procedures = safe_get(data, 'CEMLI_DB_PROCEDURES', [])
+    cemli_db_sequences = safe_get(data, 'CEMLI_DB_SEQUENCES', [])
+    cemli_db_synonyms = safe_get(data, 'CEMLI_DB_SYNONYMS', [])
+    cemli_db_tables = safe_get(data, 'CEMLI_DB_TABLES', [])
+    cemli_db_triggers = safe_get(data, 'CEMLI_DB_TRIGGERS', [])
+    cemli_db_types = safe_get(data, 'CEMLI_DB_TYPES', [])
+    cemli_db_views = safe_get(data, 'CEMLI_DB_VIEWS', [])
+    cemli_db_mviews = safe_get(data, 'CEMLI_DB_MVIEWS', [])
+    cemli_db_queues = safe_get(data, 'CEMLI_DB_QUEUES', [])
+    cemli_workflows = safe_get(data, 'CEMLI_WORKFLOWS', [])
+    
+    # CEMLI Extract: Custom Reporting Objects
+    cemli_xml_templates = safe_get(data, 'CEMLI_XML_TEMPLATES', [])
+    cemli_data_definitions = safe_get(data, 'CEMLI_DATA_DEFINITIONS', [])
+    
+    # Data Reconciliator: Organization Structure
+    data_business_groups = safe_get(data, 'DATA_BUSINESS_GROUPS', [])
+    data_set_of_books = safe_get(data, 'DATA_SET_OF_BOOKS', [])
+    data_legal_entities = safe_get(data, 'DATA_LEGAL_ENTITIES', [])
+    data_operating_units = safe_get(data, 'DATA_OPERATING_UNITS', [])
+    data_inventory_orgs = safe_get(data, 'DATA_INVENTORY_ORGS', [])
+    
+    # Data Reconciliator: Module Data Volumes
+    data_ap_volumes = safe_get(data, 'DATA_AP_VOLUMES', [])
+    data_ar_volumes = safe_get(data, 'DATA_AR_VOLUMES', [])
+    data_gl_volumes = safe_get(data, 'DATA_GL_VOLUMES', [])
+    data_po_volumes = safe_get(data, 'DATA_PO_VOLUMES', [])
+    data_om_volumes = safe_get(data, 'DATA_OM_VOLUMES', [])
+    data_inv_volumes = safe_get(data, 'DATA_INV_VOLUMES', [])
+    data_hr_volumes = safe_get(data, 'DATA_HR_VOLUMES', [])
+    data_fa_volumes = safe_get(data, 'DATA_FA_VOLUMES', [])
+    data_cm_volumes = safe_get(data, 'DATA_CM_VOLUMES', [])
+    data_opm_volumes = safe_get(data, 'DATA_OPM_VOLUMES', [])
+    data_pricing_volumes = safe_get(data, 'DATA_PRICING_VOLUMES', [])
+    
+    # Profile and Patch Changes
+    profile_changes_48h = safe_get(data, 'PROFILE_OPTIONS_CHANGED_48H', [])
+    applied_patches_30d = safe_get(data, 'APPLIED_PATCHES_30_DAYS', [])
+    
     # CEMLI Object Data (for drilldowns)
     custom_workflows = safe_get(data, 'CUSTOM_WORKFLOWS', [])
     xml_publisher = safe_get(data, 'XML_PUBLISHER_DELIVERY', [])
@@ -598,9 +964,6 @@ def build_html(data):
     
     # Calculate Complexity
     complexity_payload = calculate_complexity_score(data, db_params, active_users, custom_objs, custom_schemas, db_size, os_info, ebs_version, profiles)
-    
-    # Calculate Effort Estimation
-    effort_estimation = calculate_effort_estimation(complexity_payload, custom_objs, db_size, active_users)
     
     # Generate Risk Register
     risk_register = generate_risk_register(data, complexity_payload, os_info, 
@@ -698,16 +1061,17 @@ def build_html(data):
         <a href="#executive">1. Executive Summary</a>
         <a href="#issues">2. Issues & Challenges</a>
         <a href="#roadmap">3. Upgrade Roadmap</a>
-        <a href="#effort">4. Effort Estimation</a>
-        <a href="#cemli">5. CEMLI / Customization Impact</a>
-        <a href="#topology">6. Physical Architecture</a>
-        <a href="#wls_sizing">7. WLS Sizing & Context Services</a>
-        <a href="#integrations">8. Enterprise Integrations</a>
-        <a href="#database">9. Database Analysis</a>
-        <a href="#workload">10. Performance & Processing</a>
-        <a href="#workflow">11. Fusion Middleware Components</a>
-        <a href="#functional">12. Functional Data Volumes</a>
-        <a href="#risks">13. Risk Register</a>
+        <a href="#cemli">4. CEMLI / Customization Impact</a>
+        <a href="#topology">5. Physical Architecture</a>
+        <a href="#wls_sizing">6. WLS Sizing & Context Services</a>
+        <a href="#integrations">7. Enterprise Integrations</a>
+        <a href="#urlprofiles">8. URL Profiles & Endpoints</a>
+        <a href="#concurrent">9. Concurrent Programs & Requests</a>
+        <a href="#database">10. Database Analysis</a>
+        <a href="#workload">11. Performance & Processing</a>
+        <a href="#workflow">12. Fusion Middleware Components</a>
+        <a href="#functional">13. Functional Data Volumes</a>
+        <a href="#risks">14. Risk Register</a>
     </div>
 
     <a href="#" id="backToTop" title="Back to Top" style="display:none; position:fixed; bottom:30px; right:30px; background:var(--primary-blue); color:white; padding:15px; border-radius:50%; text-decoration:none; font-weight:bold; z-index:999; box-shadow:0 4px 10px rgba(0,0,0,0.2);">↑</a>
@@ -719,7 +1083,7 @@ def build_html(data):
             <div class="c-engine-section">
                 <div class="c-engine-left">
                     <h2 style="margin:0 0 10px 0; font-size: 24px; color: #F8FAFC;">AI Upgrade Complexity Engine</h2>
-                    <p style="margin:0; color:#94A3B8; font-size:15px; max-width: 600px;">The assessment engine processed {len(data.keys())} configuration metrics to mathematically compute the technical effort required for this transition to Oracle EBS 12.2 / 19c.</p>
+                    <p style="margin:0; color:#94A3B8; font-size:15px; max-width: 600px;">The assessment engine processed {len(data.keys())} configuration metrics to mathematically compute the complexity of this transition to Oracle EBS 12.2 / 19c.</p>
                     
                     <div class="cd-bars">
                         {''.join(f'''<div class="cd-row">
@@ -730,7 +1094,7 @@ def build_html(data):
                     </div>
                 </div>
                 <div class="c-engine-right">
-                    <div style="font-size: 13px; color: #94A3B8; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Calculated Effort Score</div>
+                    <div style="font-size: 13px; color: #94A3B8; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Complexity Score</div>
                     <div class="c-engine-score">{complexity_payload['total']}</div>
                     <div style="font-size: 13px; color: #64748B;">/ 35 Max Points</div>
                     <div class="c-size-badge" style="border: 1px solid var({complexity_payload['color']}); color: var({complexity_payload['color']});">Blast Radius: {complexity_payload['size']}</div>
@@ -785,49 +1149,8 @@ def build_html(data):
             <div class="section-header">
                 <h2>Target State Upgrade Roadmap</h2>
             </div>
-            <p>A structured approach is required transitioning your <code>{ebs_version}</code> architecture. The typical critical path for a full DB and App tier replacement on Oracle Linux 9 involves 5 logical sequences.</p>
-            {build_roadmap()}
-        </div>
-
-        <div id="effort" class="section">
-            <div class="section-header">
-                <h2>Effort Estimation by Workstream</h2>
-            </div>
-            <p>Based on the complexity assessment, the following effort distribution is estimated across standard upgrade workstreams. These are indicative weeks of effort, not calendar duration.</p>
-            
-            <div class="grid-summary">
-                <div class="metric-card" style="border-left-color: var(--primary-blue)">
-                    <div class="metric-title">Total Estimated Effort</div>
-                    <div class="metric-value">{effort_estimation['total_weeks']} Weeks</div>
-                    <div style="font-size:13px; color:#64748b;">Approximately {effort_estimation['total_months']} months of project work</div>
-                </div>
-                <div class="metric-card" style="border-left-color: var(--warning-amber)">
-                    <div class="metric-title">Complexity Classification</div>
-                    <div class="metric-value">{complexity_payload['size']}</div>
-                    <div style="font-size:13px; color:#64748b;">Score: {complexity_payload['total']}/35</div>
-                </div>
-            </div>
-            
-            <h3>Effort Distribution by Workstream</h3>
-            <table>
-                <thead>
-                    <tr><th>Workstream</th><th>Description</th><th>Estimated Weeks</th><th>% of Total</th></tr>
-                </thead>
-                <tbody>
-                    <tr><td><b>Infrastructure & Platform</b></td><td>Oracle Linux 9 deployment, network, storage provisioning</td><td>{effort_estimation['workstreams']['infra']}</td><td>{round(effort_estimation['workstreams']['infra']/effort_estimation['total_weeks']*100)}%</td></tr>
-                    <tr><td><b>Database Upgrade</b></td><td>19c/23ai upgrade, CDB conversion, character set migration</td><td>{effort_estimation['workstreams']['db']}</td><td>{round(effort_estimation['workstreams']['db']/effort_estimation['total_weeks']*100)}%</td></tr>
-                    <tr><td><b>Application Upgrade</b></td><td>EBS 12.2 installation, dual filesystem, online patching enablement</td><td>{effort_estimation['workstreams']['app']}</td><td>{round(effort_estimation['workstreams']['app']/effort_estimation['total_weeks']*100)}%</td></tr>
-                    <tr><td><b>CEMLI Remediation</b></td><td>Custom code adaptation, EBR enablement, recompilation</td><td>{effort_estimation['workstreams']['cemli']}</td><td>{round(effort_estimation['workstreams']['cemli']/effort_estimation['total_weeks']*100)}%</td></tr>
-                    <tr><td><b>Security & SSO</b></td><td>SSO re-implementation, WebGate deployment, SSL certificates</td><td>{effort_estimation['workstreams']['sso']}</td><td>{round(effort_estimation['workstreams']['sso']/effort_estimation['total_weeks']*100)}%</td></tr>
-                    <tr><td><b>Integrations</b></td><td>DB links validation, SOA/REST migration, file interfaces</td><td>{effort_estimation['workstreams']['integrations']}</td><td>{round(effort_estimation['workstreams']['integrations']/effort_estimation['total_weeks']*100)}%</td></tr>
-                    <tr><td><b>Testing (SIT/UAT/Perf)</b></td><td>Functional testing, performance validation, UAT cycles</td><td>{effort_estimation['workstreams']['testing']}</td><td>{round(effort_estimation['workstreams']['testing']/effort_estimation['total_weeks']*100)}%</td></tr>
-                    <tr><td><b>Cutover & Hypercare</b></td><td>Go-live execution, post-production support</td><td>{effort_estimation['workstreams']['cutover']}</td><td>{round(effort_estimation['workstreams']['cutover']/effort_estimation['total_weeks']*100)}%</td></tr>
-                </tbody>
-            </table>
-            
-            <div style="background: #FEF3C7; border-left: 4px solid var(--warning-amber); padding: 15px; margin-top: 20px; border-radius: 4px;">
-                <b>Note:</b> These estimates assume a dedicated team with EBS upgrade experience. Actual effort may vary based on team composition, resource availability, and discovered complexity during execution.
-            </div>
+            <p>A structured approach is required transitioning your <code>{ebs_version}</code> architecture (Database {db_version_info[1] if len(db_version_info)>1 else 'Unknown'}). The typical critical path for a full DB and App tier replacement on Oracle Linux 8/9 involves multiple phases.</p>
+            {build_roadmap(ebs_version, db_version_info[1] if len(db_version_info)>1 else '', is_rac, has_dataguard)}
         </div>
 
         <div id="cemli" class="section">
@@ -856,20 +1179,82 @@ def build_html(data):
             </div>
 
             <h3>Concurrent Program Technical Debt</h3>
-            <p style="color:red; font-size:13px; font-weight:600; margin-top:0;">&#9888; Action Required: All 'Java' and 'Spawned' (C/C++) executables must be recompiled on the target OS.</p>
+            <p style="color:red; font-size:13px; font-weight:600; margin-top:0;">&#9888; Action Required: All 'Java' and 'Spawned' (C/C++) executables must be recompiled on the target OS. See <a href="#concurrent">Concurrent Programs & Requests</a> section for full details.</p>
             {render_drilldown_table("Custom Concurrent Programs List", cemli_cp, ["Application Module", "Program Name", "Executable Name", "Execution Method"])}
             
             <h3>Forms & OAF Modifications</h3>
             {render_drilldown_table("Custom Oracle Forms (fmb)", safe_get(data, 'CEMLI_FORMS_AND_PAGES', []), ["Application Module", "Form Name", "User Form Name"])}
-            {render_drilldown_table("MDS OAF Personalizations", safe_get(data, 'CEMLI_OAF_PERSONALIZATIONS', []), ["Application Module", "JDR Path Name"])}
+            
+            <h3>Custom OAF Pages</h3>
+            <p style="font-size:13px; color:#475569;">Custom OAF pages with controller classes and AM definitions. These require JDeveloper recompilation for EBS 12.2.</p>
+            {render_drilldown_table("Custom OAF Page Components", cemli_oaf_pages, ["Page Name", "Full Path", "Attribute Name", "Attribute Value"])}
+            
+            <h3>OAF Personalizations / Customizations</h3>
+            <p style="font-size:13px; color:#475569;">MDS-based personalizations applied to standard OAF pages. These must be validated post-upgrade.</p>
+            {render_drilldown_table("OAF Personalizations", cemli_oaf_personalizations, ["Document Name", "Full Path", "Last Update Date"])}
 
-            <h3>Custom FND Configurations (Deep Dive)</h3>
-            <p style="font-size:13px; color:#475569;">Includes menus, functions, responsibilities, lookups, and flexfields prefixed with XX% for rigorous application security mapping.</p>
-            {render_drilldown_table("Custom Application Setup Configurations", custom_fnd, ["FND Object Type", "Object Name"])}
+            <h3>Custom FND Objects (Detailed)</h3>
+            <p style="font-size:13px; color:#475569;">Comprehensive breakdown of custom FND objects by type with application ownership.</p>
+            
+            {render_drilldown_table("Custom Lookups", cemli_lookups, ["App ID", "Lookup Type", "Application Name", "Meaning"])}
+            {render_drilldown_table("Custom Menus", cemli_menus, ["Menu ID", "Menu Name", "User Menu Name", "Application Name"])}
+            {render_drilldown_table("Custom Messages", cemli_messages, ["App ID", "Message Name", "Application Name", "Message Text"])}
+            {render_drilldown_table("Custom Profiles", cemli_profiles, ["Profile ID", "Profile Name", "User Profile Name", "Application Name"])}
+            {render_drilldown_table("Custom Request Groups", cemli_request_groups, ["Group ID", "Group Name", "Application Name", "Description"])}
+            {render_drilldown_table("Custom Request Sets", cemli_request_sets, ["Set ID", "Set Name", "User Set Name", "Application Name"])}
+            {render_drilldown_table("Custom Value Sets", cemli_value_sets, ["Value Set ID", "Value Set Name", "Description", "Validation Type"])}
 
             <h3>Other Customized Core Components</h3>
             {render_drilldown_table("Custom Workflow Definitions", custom_workflows, ["Item Type", "Display Name"])}
             {render_drilldown_table("BIP / XML Publisher Templates", xml_publisher, ["XML Template Code", "Output Type"])}
+            
+            <h3>Flagged Files for Upgrade Analysis</h3>
+            <p style="font-size:13px; color:#475569;">Custom files tracked in AD schema that require review and potential remediation during upgrade. These include XX-prefixed files and files in custom directories.</p>
+            {render_drilldown_table("View Flagged Custom Files (AD_FILES)", flagged_files, ["Application", "Directory", "Filename", "Version", "Translation Level", "Version Date"])}
+            
+            <h3>Custom Application Tops</h3>
+            <p style="font-size:13px; color:#475569;">Registered custom APPL_TOP directories that may contain custom code requiring migration.</p>
+            {render_table(custom_top_files, ["APPL_TOP Name", "Base Path", "Applications System"])}
+            
+            <h3>Custom Files Distribution by Type</h3>
+            <p style="font-size:13px; color:#475569;">Breakdown of custom file extensions to identify file types requiring specific remediation (e.g., .fmb, .pll, .class, .java).</p>
+            {render_table(ad_files_by_type, ["File Extension", "Count"])}
+            
+            <h3>Recently Patched Files (Last 90 Days)</h3>
+            <p style="font-size:13px; color:#475569;">Files modified by recent patches that may impact custom code dependencies.</p>
+            {render_drilldown_table("View Recently Patched Files", patched_files_recent, ["Application", "Filename", "Patch Name", "Applied Date"])}
+            
+            <h3>CEMLI: Custom Applications</h3>
+            <p style="font-size:13px; color:#475569;">Registered custom applications in FND_APPLICATION that require migration.</p>
+            {render_drilldown_table("View Custom Applications", cemli_custom_apps, ["App ID", "Application Name", "Short Name", "Base Path", "Created Date"])}
+            
+            <h3>CEMLI: Custom Alerts</h3>
+            {render_drilldown_table("View Custom Alerts", cemli_custom_alerts, ["Alert Name", "Application Name", "Alert Type", "Status"])}
+            
+            <h3>CEMLI: Custom Database Objects</h3>
+            <p style="font-size:13px; color:#475569;">Custom database objects (XX-prefixed or in custom schemas) that require EBR enablement and validation.</p>
+            {render_drilldown_table("Custom Functions", cemli_db_functions, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Packages", cemli_db_packages, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Procedures", cemli_db_procedures, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Tables", cemli_db_tables, ["Table Name", "Owner", "Tablespace", "Num Rows", "Partitioned", "Created"])}
+            {render_drilldown_table("Custom Views", cemli_db_views, ["View Name", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Indexes", cemli_db_indexes, ["Index Name", "Type", "Owner", "Status", "Table Name", "Uniqueness"])}
+            {render_drilldown_table("Custom Sequences", cemli_db_sequences, ["Sequence Name", "Owner", "Min Value", "Max Value", "Increment", "Last Number"])}
+            {render_drilldown_table("Custom Synonyms", cemli_db_synonyms, ["Synonym Name", "Owner", "Table Owner", "Table Name", "DB Link"])}
+            {render_drilldown_table("Custom Triggers", cemli_db_triggers, ["Trigger Name", "Owner", "Table Owner", "Table Name", "Event", "Status"])}
+            {render_drilldown_table("Custom Types", cemli_db_types, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Materialized Views", cemli_db_mviews, ["MView Name", "Owner", "Container", "Refresh Mode", "Refresh Method", "Staleness"])}
+            {render_drilldown_table("Custom Queues", cemli_db_queues, ["Queue Name", "Owner", "Queue Table", "Type", "Enqueue", "Dequeue"])}
+            {render_drilldown_table("Custom LOB Segments", cemli_db_lobs, ["Table Name", "Column Name", "Owner", "Segment Name", "Tablespace", "Chunk Size"])}
+            
+            <h3>CEMLI: Custom Workflows</h3>
+            <p style="font-size:13px; color:#475569;">Custom workflow item types and processes requiring validation post-upgrade.</p>
+            {render_drilldown_table("Custom Workflow Definitions", cemli_workflows, ["Item Type", "Display Name", "Persistence Type", "Persistence Days", "Activity Count"])}
+            
+            <h3>CEMLI: Custom Reporting Objects (XML Publisher / BI Publisher)</h3>
+            <p style="font-size:13px; color:#475569;">Custom XML/BI Publisher templates and data definitions requiring migration and testing.</p>
+            {render_drilldown_table("XML Publisher Templates", cemli_xml_templates, ["App ID", "Template Code", "Template Name", "Description", "Application", "Type", "Status"])}
+            {render_drilldown_table("Data Definitions", cemli_data_definitions, ["App ID", "Data Source Code", "Data Source Name", "Description", "Application", "Status", "Created"])}
         </div>
 
         <div id="topology" class="section">
@@ -939,12 +1324,136 @@ def build_html(data):
             </div>
         </div>
 
+        <div id="urlprofiles" class="section">
+            <div class="section-header">
+                <h2>URL Profiles & Endpoints</h2>
+            </div>
+            <p>Critical URL profiles that define how users and integrations connect to the EBS application. These must be updated during upgrade and SSL/TLS configuration changes.</p>
+            
+            <h3>EBS URL Configuration Profiles</h3>
+            <p style="font-size:13px; color:#475569;">These site-level profile values control application URLs, authentication endpoints, and integration service locations. Review and update these profiles post-upgrade.</p>
+            {render_url_profiles_table(ebs_url_profiles)}
+        </div>
+
+        <div id="concurrent" class="section">
+            <div class="section-header">
+                <h2>Concurrent Programs & Requests</h2>
+            </div>
+            <p>Comprehensive analysis of concurrent processing workloads, custom concurrent programs, and execution patterns critical for upgrade planning.</p>
+            
+            <h3>Custom Concurrent Programs</h3>
+            <p style="font-size:13px; color:#475569;">Custom concurrent programs registered under custom applications (application_id >= 20000) or with XX% naming convention. These require testing and potential remediation during upgrade.</p>
+            {render_drilldown_table("View Custom Concurrent Programs", cemli_cp, ["Application", "Program Name", "Executable Name", "Execution Method"])}
+            
+            <h3>CEMLI: Concurrent Programs by Execution Type</h3>
+            <div class="grid-summary">
+                <div class="metric-card" style="border-left-color: var(--warning-amber)">
+                    <div class="metric-title">Host Programs</div>
+                    <div class="metric-value">{len(cemli_conc_host) if cemli_conc_host and cemli_conc_host[0][0] != 'N/A' else 0}</div>
+                    <div style="font-size:13px; color:#64748b;">Shell script executables</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--primary-blue)">
+                    <div class="metric-title">Java Concurrent</div>
+                    <div class="metric-value">{len(cemli_conc_java) if cemli_conc_java and cemli_conc_java[0][0] != 'N/A' else 0}</div>
+                    <div style="font-size:13px; color:#64748b;">Java stored procedures</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--danger-red)">
+                    <div class="metric-title">Oracle Reports</div>
+                    <div class="metric-value">{len(cemli_conc_reports) if cemli_conc_reports and cemli_conc_reports[0][0] != 'N/A' else 0}</div>
+                    <div style="font-size:13px; color:#64748b;">Reports executables - CRITICAL</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--success-green)">
+                    <div class="metric-title">SQL*Plus Programs</div>
+                    <div class="metric-value">{len(cemli_conc_sqlplus) if cemli_conc_sqlplus and cemli_conc_sqlplus[0][0] != 'N/A' else 0}</div>
+                    <div style="font-size:13px; color:#64748b;">SQL*Plus scripts</div>
+                </div>
+            </div>
+            
+            {render_drilldown_table("Host Programs Detail", cemli_conc_host, ["Application", "Program Name", "Executable", "Description"])}
+            {render_drilldown_table("Oracle Reports Detail", cemli_conc_reports, ["Application", "Program Name", "Executable", "Description"])}
+            {render_drilldown_table("SQL*Loader Programs Detail", cemli_conc_sqlloader, ["Application", "Program Name", "Executable", "Description"])}
+            
+            <h3>Concurrent Manager Queue Status</h3>
+            <p style="font-size:13px; color:#475569;">Current state of concurrent manager queues showing processing capacity and workload distribution.</p>
+            {render_table(conc_mgr_status, ["Queue ID", "Short Name", "Manager Name", "Target Node", "Max Allowed", "Running", "Run Tasks", "Pending Tasks", "Control State"])}
+            
+            <h3>Daily Concurrent Request Volume (30 Days)</h3>
+            <p style="font-size:13px; color:#475569;">Daily concurrent request counts showing workload patterns for capacity planning.</p>
+            {render_table(daily_conc_reqs, ["Execution Date", "Total Request Count"])}
+            
+            <h3>Top 100 Concurrent Programs by Execution Count (30 Days)</h3>
+            <p style="font-size:13px; color:#475569;">Most frequently executed programs - prioritize these for upgrade testing.</p>
+            {render_drilldown_table("View Top 100 by Execution", top_100_conc_by_exec, ["Program Name", "Total Executions"])}
+            
+            <h3>Top 100 Concurrent Programs by Average Run Time</h3>
+            <p style="font-size:13px; color:#475569;">Longest running programs - monitor for performance regression after upgrade.</p>
+            {render_drilldown_table("View Top 100 by Run Time", top_100_conc_by_time, ["Program Name", "Executions", "Avg Hours", "Max Hours", "Min Hours"])}
+            
+            <h3>Scheduled Concurrent Jobs</h3>
+            <p style="font-size:13px; color:#475569;">Currently scheduled jobs that will need validation post-upgrade.</p>
+            {render_drilldown_table("View Scheduled Jobs", scheduled_jobs, ["Request ID", "Parent ID", "Program Name", "Status", "Phase", "Schedule Type"])}
+        </div>
+
         <div id="database" class="section">
             <div class="section-header">
                 <h2>Database Deep-Dive Analysis</h2>
             </div>
             <p>Comprehensive database analysis including character set, tablespace distribution, and database features usage.</p>
             
+            <h3>RAC (Real Application Clusters) Configuration</h3>
+            <div class="grid-summary">
+                <div class="metric-card" style="border-left-color: {'var(--primary-blue)' if is_rac else 'var(--success-green)'}">
+                    <div class="metric-title">Cluster Database</div>
+                    <div class="metric-value">{'RAC' if is_rac else 'Single Instance'}</div>
+                    <div style="font-size:13px; color:#64748b;">{'Multi-node cluster deployment' if is_rac else 'Standard single-node database'}</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--primary-blue)">
+                    <div class="metric-title">Instance Count</div>
+                    <div class="metric-value">{rac_instance_count}</div>
+                    <div style="font-size:13px; color:#64748b;">{'Active RAC instances' if is_rac else 'Database instance'}</div>
+                </div>
+            </div>
+    """
+    
+    # Add RAC-specific sections if it's a RAC database
+    if is_rac:
+        html += f"""
+            <h3>RAC Instance Details</h3>
+            <p style="font-size:13px; color:#475569;">Details of all RAC instances including host, version, status, and startup time.</p>
+            {render_table(rac_instances, ["Instance ID", "Instance Name", "Host Name", "Version", "Status", "Startup Time", "DB Status", "Instance Role"])}
+            
+            <h3>RAC Database Information</h3>
+            {render_table(rac_database_info, ["Property", "Value"])}
+            
+            <h3>RAC Instance Parameters</h3>
+            <p style="font-size:13px; color:#475569;">Critical init parameters per RAC instance. Parameters like SGA, PGA, and undo tablespace may differ between instances.</p>
+            {render_drilldown_table("View RAC Instance Parameters", rac_instance_params, ["Instance ID", "Parameter Name", "Value", "Is Default"])}
+            
+            <h3>Cluster Interconnect Configuration</h3>
+            <p style="font-size:13px; color:#475569;">Private interconnect network used for cache fusion and inter-instance communication.</p>
+            {render_table(rac_interconnect, ["Instance ID", "Interface Name", "IP Address", "Is Public", "Source"])}
+            
+            <h3>RAC Services</h3>
+            <p style="font-size:13px; color:#475569;">Database services configured for workload management and failover.</p>
+            {render_drilldown_table("View RAC Services", rac_services, ["Instance ID", "Service Name", "Network Name", "Enabled", "AQ HA Notifications", "CLB Goal", "Goal"])}
+            
+            <h3>SCAN & Local Listeners</h3>
+            {render_table(rac_scan_listeners, ["Listener Type", "Configuration"])}
+            
+            <h3>ASM Disk Groups</h3>
+            <p style="font-size:13px; color:#475569;">Automatic Storage Management disk groups used for database storage.</p>
+            {render_table(rac_asm_diskgroups, ["Disk Group Name", "State", "Type", "Total MB", "Free MB", "% Free"])}
+            
+            <h3>RAC Redo Log Threads</h3>
+            <p style="font-size:13px; color:#475569;">Redo log groups by thread - each RAC instance has its own redo thread.</p>
+            {render_table(rac_thread_redo, ["Thread #", "Group #", "Members", "Size (MB)", "Status", "Archived"])}
+            
+            <h3>Global Cache Statistics</h3>
+            <p style="font-size:13px; color:#475569;">Cache fusion statistics for inter-instance block transfers. High values indicate active inter-node communication.</p>
+            {render_drilldown_table("View Global Cache Statistics", rac_gv_sysstat, ["Instance ID", "Statistic Name", "Value"])}
+        """
+    
+    html += f"""
             <h3>Database Character Set & NLS Configuration</h3>
             {render_table(safe_get(data, 'DB_CHARACTER_SET', []), ["NLS Parameter", "Current Value"])}
             
@@ -963,12 +1472,16 @@ def build_html(data):
             <h3>Invalid Objects by Owner/Type</h3>
             {render_drilldown_table("View Invalid Schema Objects", safe_get(data, 'INVALID_OBJECTS_DETAIL', []), ["Schema Owner", "Object Name", "Object Type", "Status", "Last DDL Timestamp"])}
             
-            <h3>AD Registered Schemas</h3>
-            <p style="font-size:13px; color:#475569;">Schemas registered with Oracle AD utilities. Custom schemas (XX*) must be registered for online patching compatibility.</p>
+            <h3>Custom AD Registered Schemas</h3>
+            <p style="font-size:13px; color:#475569;">Custom schemas (XX*, CUSTOM*) registered with Oracle AD utilities. These must be properly registered for online patching compatibility.</p>
             {render_table(safe_get(data, 'AD_REGISTERED_SCHEMAS', []), ["Schema Name", "Read Only"])}
             
             <h3>Recently Applied Patches (Last 180 Days)</h3>
             {render_table(safe_get(data, 'AD_APPLIED_PATCHES_RECENT', []), ["Patch Name", "Patch Type", "Applied Date"])}
+            
+            <h3>Applied Patches (Last 90 Days - Detailed)</h3>
+            <p style="font-size:13px; color:#475569;">Comprehensive patch application history extracted from AD schema for recent upgrade activity tracking.</p>
+            {render_drilldown_table("View Applied Patches in Last 90 Days", applied_patches_90_days, ["Patch Name", "Last Update Date", "Applied Flag"])}
             
             <h3>Database Links Detail</h3>
             {render_table(safe_get(data, 'DB_LINKS_DETAIL', []), ["Owner", "DB Link Name", "Host"])}
@@ -981,18 +1494,6 @@ def build_html(data):
             
             <h3>PCP (Parallel Concurrent Processing) Distribution</h3>
             {render_table(pcp_managers, ["Queue Routing ID", "Primary Node", "Failover Node"])}
-            
-            <h3>Concurrent Manager Queue Status Matrix</h3>
-            {render_table(conc_mgr_status, ["Queue ID", "Short Name", "Manager Name", "Target Node", "Max Allowed", "Running", "Run Tasks", "Pending Tasks", "Control State"])}
-            
-            <h3>Volume of Daily Concurrent Requests for Last Month</h3>
-            {render_table(daily_conc_reqs, ["Execution Date", "Total Job Count Raised"])}
-
-            <h3>Top 50 Concurrent Programs by Aggregate Execution Counts</h3>
-            {render_table(top_50_execs, ["EBS Concurrent Routine Program", "Execution Count (30d)"])}
-
-            <h3>Top 50 Concurrent Programs by Average Run Time (Mins)</h3>
-            {render_table(top_50_time, ["EBS Concurrent Routine Program", "Avg Historic Duration (Mins)"])}
             
             <h3>Top 10 Heaviest Database Segments</h3>
             <p style="font-size:13px; color:#475569;">Storage engineering constraints for tablespace reorganizations.</p>
@@ -1046,18 +1547,9 @@ def build_html(data):
             <h3>Base TechStack Context (12.1.3 Baseline)</h3>
             """
     
-    if len(all_nodes_context) > 0 and all_nodes_context[0][0] != 'N/A':
-        techstack_rows = []
-        for c in all_nodes_context:
-            if len(c) > 13:
-                techstack_rows.append([c[0], 'ATG_VERSION', c[6]])
-                techstack_rows.append([c[0], 'TOOLS_VERSION', c[7]])
-                techstack_rows.append([c[0], 'OHS_VERSION', c[8]])
-                techstack_rows.append([c[0], 'JDK_TARGET', c[9]])
-                techstack_rows.append([c[0], 'ADKEYSTORE', c[11]])
-                techstack_rows.append([c[0], 'TRUSTSTORE', c[12]])
-                techstack_rows.append([c[0], 'WEB_SSL_DIR', c[13]])
-        html += render_table(techstack_rows, ["Node Target", "Topology Property", "Discovered Deployment Path / Version"])
+    # Use ctx_dirs to build techstack information
+    if len(ctx_dirs) > 0 and ctx_dirs[0][0] != 'N/A':
+        html += render_table(ctx_dirs, ["Physical Node", "Configuration Property", "Deployment Path / Value"])
     else:
         html += "<p style='color:#777; font-size:14px; font-style:italic;'>TechStack Context not available in Registry.</p>"
         
@@ -1114,6 +1606,66 @@ def build_html(data):
             
             <h3>User Base Trajectory (Created Per Month)</h3>
             {render_table(users_created, ["Account Creation Month", "Volume Generated"])}
+            
+            <h3>Active Users with Responsibilities</h3>
+            <p style="font-size:13px; color:#475569;">Mapping of active users to their assigned responsibilities for security and access control analysis during upgrade.</p>
+            {render_drilldown_table("View Active Users with Responsibilities (up to 1000)", active_users_with_resp, ["User Name", "Responsibility Name"])}
+            
+            <h3>Organization Structure: Business Groups</h3>
+            {render_table(data_business_groups, ["Business Group Name", "Org ID", "Date From", "Date To", "Legislation Code", "Currency Code"])}
+            
+            <h3>Organization Structure: Set of Books / Ledgers</h3>
+            {render_table(data_set_of_books, ["SOB ID", "Name", "Short Name", "Currency Code", "Period Type", "Latest Opened Period", "Currency Name"])}
+            
+            <h3>Organization Structure: Legal Entities</h3>
+            {render_table(data_legal_entities, ["LE ID", "Legal Entity Name", "LE Identifier", "Country", "Address", "Effective From", "Effective To"])}
+            
+            <h3>Organization Structure: Operating Units</h3>
+            {render_table(data_operating_units, ["Org ID", "Operating Unit Name", "Short Code", "Business Group", "Date From", "Date To"])}
+            
+            <h3>Organization Structure: Inventory Organizations</h3>
+            {render_table(data_inventory_orgs, ["Org ID", "Org Code", "Organization Name", "Operating Unit", "Master Org ID", "Status"])}
+            
+            <h3>Module Data Volumes: Payables (AP)</h3>
+            {render_table(data_ap_volumes, ["AP Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Receivables (AR)</h3>
+            {render_table(data_ar_volumes, ["AR Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: General Ledger (GL)</h3>
+            {render_table(data_gl_volumes, ["GL Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Purchasing (PO)</h3>
+            {render_table(data_po_volumes, ["PO Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Order Management (OM)</h3>
+            {render_table(data_om_volumes, ["OM Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Inventory (INV)</h3>
+            {render_table(data_inv_volumes, ["INV Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Human Resources (HR)</h3>
+            {render_table(data_hr_volumes, ["HR Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Fixed Assets (FA)</h3>
+            {render_table(data_fa_volumes, ["FA Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Cost Management (CM)</h3>
+            {render_table(data_cm_volumes, ["CM Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Process Manufacturing (OPM)</h3>
+            {render_table(data_opm_volumes, ["OPM Object", "Record Count"])}
+            
+            <h3>Module Data Volumes: Pricing (QP)</h3>
+            {render_table(data_pricing_volumes, ["Pricing Object", "Record Count"])}
+            
+            <h3>Profile Options Changed (Last 48 Hours)</h3>
+            <p style="font-size:13px; color:#475569;">Recent profile option changes that may indicate active configuration or troubleshooting activities.</p>
+            {render_drilldown_table("View Profile Changes", profile_changes_48h, ["Profile Name", "User Profile Name", "Level", "Value", "Changed At", "Changed By"])}
+            
+            <h3>Applied Patches (Last 30 Days)</h3>
+            <p style="font-size:13px; color:#475569;">Recent patch application history for tracking upgrade and maintenance activities.</p>
+            {render_drilldown_table("View Applied Patches", applied_patches_30d, ["Patch Name", "Patch Type", "Applied Date", "Applied Flag"])}
         </div>
 
         <div id="risks" class="section">

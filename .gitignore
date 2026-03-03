@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+# Generated report files (keep samples/examples in output/)
+EBS_Upgrade_Impact_Analysis_*.html
