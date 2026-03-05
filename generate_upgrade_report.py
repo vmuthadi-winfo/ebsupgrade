@@ -186,11 +186,20 @@ def determine_integrations(profiles, apex_ords_data):
             if value != 'NOT_DEFINED':
                 integ['SOA_ISG'] = {'status': 'Active', 'desc': f'Integrated SOA Gateway detected via {name}. ISG has major architectural shifts in 12.2.', 'color': '--warning-amber', 'roadmap': 'REST services must be migrated to the new EBS Weblogic ISG deployment mechanism. SOAP endpoints must be re-generated.'}
         
-        # OBIEE detection - specific profiles
-        if name in ['FND_OBIEE_URL', 'HRI_IMPL_OBIEE']:
+        # OBIEE detection - use FND_OBIEE_URL as primary indicator (actual URL)
+        # HRI_IMPL_OBIEE alone is not sufficient - it's just an HR profile that can be seeded
+        if name == 'FND_OBIEE_URL':
             value_upper = value.upper() if value else ''
-            if value != 'NOT_DEFINED' and value_upper not in ['N', 'NO']:
+            if value != 'NOT_DEFINED' and value_upper not in ['N', 'NO', '']:
+                # FND_OBIEE_URL with actual URL value indicates OBIEE is truly configured
                 integ['OBIEE'] = {'status': 'Active', 'desc': f'OBIEE/OAC configured via {name}={value}.', 'color': '--primary-blue', 'roadmap': 'No DB structural impact, but EBS Auth integration to OAS/OAC must be tested against new WLS cookies.'}
+        
+        # HRI_IMPL_OBIEE=Y only indicates OBIEE is available for HR Intelligence, but needs FND_OBIEE_URL
+        # to be truly functional. Mark as "Review Required" if HRI_IMPL_OBIEE=Y but no FND_OBIEE_URL found yet
+        if name == 'HRI_IMPL_OBIEE':
+            value_upper = value.upper() if value else ''
+            if value_upper == 'Y' and integ['OBIEE']['status'] == 'Disabled':
+                integ['OBIEE'] = {'status': 'Review Required', 'desc': f'HRI_IMPL_OBIEE={value} indicates HR Intelligence may be using OBIEE, but FND_OBIEE_URL is not configured. Review if OBIEE is actually deployed.', 'color': '--warning-amber', 'roadmap': 'Verify if Oracle Business Intelligence (OBIEE/OAC) is installed and being used. If not, consider disabling HRI_IMPL_OBIEE profile.'}
         
         # ENDECA detection - profiles that indicate actual Endeca usage (not just existence of profile)
         # Only count profiles that have real values (not NOT_DEFINED)
@@ -298,21 +307,38 @@ def run_prebuilt_rules(db_version, ebs_version, db_params, os_info, db_size, dat
 
     return challenges
 
-def build_roadmap(ebs_version, db_version, is_rac, has_dataguard):
+def build_roadmap(ebs_version, db_version, is_rac, has_dataguard, tech_stack_info=None):
     """Build dynamic upgrade roadmap based on source environment."""
     
     # Determine source state
     is_ebs_1213 = '12.1' in str(ebs_version) or '1213' in str(ebs_version).replace('.', '')
+    is_ebs_122x = '12.2' in str(ebs_version)  # Already on 12.2.x
     is_ebs_1220 = '12.2.0' in str(ebs_version)
     is_db_11g = '11' in str(db_version)
     is_db_12c = '12' in str(db_version)
+    is_db_19c = '19' in str(db_version)
+    
+    # Extract version number for 12.2.x releases
+    ebs_minor_version = 0
+    if is_ebs_122x:
+        try:
+            # Extract minor version number (e.g., 12.2.15 -> 15)
+            parts = str(ebs_version).split('.')
+            if len(parts) >= 3:
+                ebs_minor_version = int(parts[2])
+        except (ValueError, IndexError):
+            ebs_minor_version = 0
     
     # Build complexity indicators
     complexity_factors = []
     if is_ebs_1213:
         complexity_factors.append("EBS 12.1.3 → 12.2 upgrade (Major architectural change)")
+    elif is_ebs_122x and ebs_minor_version < 15:
+        complexity_factors.append(f"EBS 12.2.{ebs_minor_version} → 12.2.15 upgrade (Continuous Innovation patching)")
     if is_db_11g:
         complexity_factors.append("Database 11g → 19c upgrade (2 major version jumps)")
+    elif is_db_12c:
+        complexity_factors.append("Database 12c → 19c upgrade (Major version upgrade)")
     if is_rac:
         complexity_factors.append("RAC cluster coordination required")
     if has_dataguard:
@@ -363,50 +389,195 @@ def build_roadmap(ebs_version, db_version, is_rac, has_dataguard):
         </div>
         """
     
-    return f"""
-    {complexity_html}
+    # Tech stack info display for 12.2.x environments
+    tech_stack_html = ""
+    if tech_stack_info and is_ebs_122x:
+        tech_stack_html = """
+        <div style="background:#EFF6FF; border-left:4px solid #3B82F6; padding:15px; margin:20px 0; border-radius:6px;">
+            <strong style="color:#1E40AF;">📦 Current Technology Stack (EBS 12.2.x):</strong>
+            <ul style="margin:10px 0 0 20px; color:#1E40AF;">
+        """
+        for key, value in tech_stack_info.items():
+            if value and value not in ['Unknown', 'N/A', '']:
+                tech_stack_html += f"<li><b>{key}:</b> {value}</li>"
+        tech_stack_html += "</ul></div>"
     
-    <h3>Upgrade Approach Overview</h3>
-    <p style="font-size:14px; color:#475569;">The following phased approach addresses the transition from your current environment to the target Oracle EBS 12.2.15 on Database 19c architecture.</p>
-    
-    <div class="roadmap-timeline">
-        <div class="rm-step">
-            <div class="rm-badge">Ph 1</div>
-            <div>
-                <strong>Infrastructure & Technical Stack</strong><br>
-                Deploy Oracle Linux 8/9 (RHEL 8/9). Install Oracle Database 19c binary in Multitenant architecture (CDB). 
-                {'<span style="color:#DC2626;">(Current DB 11g requires direct to 19c upgrade path)</span>' if is_db_11g else ''}
+    # Build different roadmaps based on EBS version
+    if is_ebs_122x:
+        # Already on 12.2.x - simpler upgrade path to 12.2.15
+        db_upgrade_step = ""
+        if is_db_11g:
+            db_upgrade_step = "Upgrade from 11g to 19c using AutoUpgrade or DBUA. "
+        elif is_db_12c:
+            db_upgrade_step = "Upgrade from 12c to 19c using AutoUpgrade. "
+        elif not is_db_19c:
+            db_upgrade_step = "Upgrade database to 19c using AutoUpgrade. "
+        else:
+            db_upgrade_step = "Database is already at 19c. Apply latest Release Update (RU). "
+        
+        return f"""
+        {complexity_html}
+        {tech_stack_html}
+        
+        <h3>Upgrade Approach Overview (EBS 12.2.x to 12.2.15)</h3>
+        <p style="font-size:14px; color:#475569;">Since your environment is already on EBS 12.2.x, the upgrade path is streamlined. Focus is on applying RUPs and updating the technology stack components.</p>
+        
+        <div class="roadmap-timeline">
+            <div class="rm-step">
+                <div class="rm-badge">Ph 1</div>
+                <div>
+                    <strong>Infrastructure Refresh (If Required)</strong><br>
+                    Upgrade Oracle Linux to 8/9 (RHEL 8/9) if on older version. Validate storage and compute requirements for new WLS versions.
+                    Prepare the target infrastructure with updated hardware requirements.
+                </div>
+            </div>
+            <div class="rm-step">
+                <div class="rm-badge">Ph 2</div>
+                <div>
+                    <strong>Database Upgrade</strong><br>
+                    {db_upgrade_step}
+                    Migrate to PDB architecture if still using non-CDB. Apply latest DB Release Updates.
+                </div>
+            </div>
+            <div class="rm-step">
+                <div class="rm-badge">Ph 3</div>
+                <div>
+                    <strong>AD/TXK Delta Patching</strong><br>
+                    Apply the latest AD/TXK Delta packs required for 12.2.15. Update WebLogic Server to certified version (12.2.1.4.0).
+                    Update Oracle HTTP Server (OHS) to certified version. Apply required technology stack patches.
+                </div>
+            </div>
+            <div class="rm-step">
+                <div class="rm-badge">Ph 4</div>
+                <div>
+                    <strong>Apply 12.2.15 Release Update Pack (RUP)</strong><br>
+                    Use ADOP to apply the 12.2.15 RUP in preparation, application, finalization phases.
+                    Validate Online Patching (EBR) status. Run diagnostics and validation scripts.
+                </div>
+            </div>
+            <div class="rm-step">
+                <div class="rm-badge">Ph 5</div>
+                <div>
+                    <strong>Integration & Validation</strong><br>
+                    Re-validate SSO, OAC, ISG, and third-party integrations. Test CEMLI customizations against new release.
+                    Execute functional test cycles and performance benchmarking.
+                </div>
             </div>
         </div>
-        <div class="rm-step">
-            <div class="rm-badge">Ph 2</div>
-            <div>
-                <strong>Database Upgrade & Migration</strong><br>
-                {'Upgrade from 11g to 19c using AutoUpgrade or DBUA. ' if is_db_11g else 'Upgrade from 12c to 19c using AutoUpgrade. '}
-                Migrate into 19c PDB. Convert <code>UTL_FILE_DIR</code> to Oracle Directories. Migrate character sets to AL32UTF8 (if needed).
-            </div>
+        
+        {rac_html}
+        {dg_html}
+        
+        <h3>High-Level EBS 12.2.x to 12.2.15 Upgrade Steps</h3>
+        <p style="font-size:13px; color:#475569;">The following activities represent the critical path for completing an EBS 12.2.15 RUP upgrade project:</p>
+        
+        <table style="font-size:13px;">
+            <thead>
+                <tr>
+                    <th style="width:50px;">Step</th>
+                    <th style="width:150px;">Phase</th>
+                    <th>Activity Description</th>
+                    <th style="width:100px;">Duration Est.</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="text-align:center; font-weight:bold;">1</td>
+                    <td>Planning</td>
+                    <td><strong>Assess & Plan</strong> - Review current patch levels, verify CEMLI compatibility, identify required pre-requisite patches</td>
+                    <td>2-3 days</td>
+                </tr>
+                <tr>
+                    <td style="text-align:center; font-weight:bold;">2</td>
+                    <td>Infrastructure</td>
+                    <td><strong>Clone & Prepare</strong> - Clone production to test environment, validate storage, prepare rollback strategy</td>
+                    <td>2-3 days</td>
+                </tr>
+                <tr>
+                    <td style="text-align:center; font-weight:bold;">3</td>
+                    <td>Database</td>
+                    <td><strong>DB Upgrade</strong> - {'Apply 19c upgrade' if not is_db_19c else 'Apply latest DB RU'}, run pre-upgrade fixups, execute AutoUpgrade</td>
+                    <td>{'4-8 hours' if is_db_19c else '1-2 days'}</td>
+                </tr>
+                <tr>
+                    <td style="text-align:center; font-weight:bold;">4</td>
+                    <td>Technology</td>
+                    <td><strong>AD/TXK Delta</strong> - Apply AD and TXK delta patches, update WebLogic binaries, update OHS</td>
+                    <td>4-8 hours</td>
+                </tr>
+                <tr>
+                    <td style="text-align:center; font-weight:bold;">5</td>
+                    <td>Application</td>
+                    <td><strong>Apply RUP</strong> - Execute ADOP prepare, apply, finalize for 12.2.15 RUP bundle</td>
+                    <td>8-16 hours</td>
+                </tr>
+                <tr>
+                    <td style="text-align:center; font-weight:bold;">6</td>
+                    <td>Validation</td>
+                    <td><strong>Post-Upgrade Validation</strong> - Run diagnostics, validate integrations, execute smoke tests</td>
+                    <td>1-2 days</td>
+                </tr>
+                <tr>
+                    <td style="text-align:center; font-weight:bold;">7</td>
+                    <td>Testing</td>
+                    <td><strong>UAT & Functional Testing</strong> - Execute full UAT cycle, validate business processes</td>
+                    <td>1-2 weeks</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div style="margin-top: 25px; padding: 15px; background: #F0FDF4; border-radius: 8px; border: 1px solid #BBF7D0;">
+            <strong>📋 Timeline Estimate for EBS 12.2.x → 12.2.15:</strong><br>
+            <strong>Typical Range:</strong> 2-4 weeks (depending on DB version and testing requirements)<br>
+            <strong>Cutover Window:</strong> 8-24 hours depending on database upgrade requirements
         </div>
-        <div class="rm-step">
-            <div class="rm-badge">Ph 3</div>
-            <div>
-                <strong>Application Upgrade {'(12.1.3 → 12.2.0 Base)' if is_ebs_1213 else '(12.2.0 Base)'}</strong><br>
-                {'Major version upgrade from 12.1.3 to 12.2.0 using AD leveling scripts. ' if is_ebs_1213 else ''}
-                Rapid Install the 12.2 File System via DB upgrade mode. Deploy dual-file system and WebLogic Server (WLS 10.3.6). Enable Online Patching (EBR).
+    """
+    else:
+        # Original 12.1.3 to 12.2 upgrade path
+        return f"""
+        {complexity_html}
+        
+        <h3>Upgrade Approach Overview</h3>
+        <p style="font-size:14px; color:#475569;">The following phased approach addresses the transition from your current environment to the target Oracle EBS 12.2.15 on Database 19c architecture.</p>
+        
+        <div class="roadmap-timeline">
+            <div class="rm-step">
+                <div class="rm-badge">Ph 1</div>
+                <div>
+                    <strong>Infrastructure & Technical Stack</strong><br>
+                    Deploy Oracle Linux 8/9 (RHEL 8/9). Install Oracle Database 19c binary in Multitenant architecture (CDB). 
+                    {'<span style="color:#DC2626;">(Current DB 11g requires direct to 19c upgrade path)</span>' if is_db_11g else ''}
+                </div>
             </div>
-        </div>
-        <div class="rm-step">
-            <div class="rm-badge">Ph 4</div>
-            <div>
-                <strong>CEMLI Remediation (Customizations)</strong><br>
-                Apply Online Patching logical columns to all custom tables. Re-compile Java/C executables natively on target OS. Remediate custom PL/SQL to Edition-based standards. Validate all custom objects.
+            <div class="rm-step">
+                <div class="rm-badge">Ph 2</div>
+                <div>
+                    <strong>Database Upgrade & Migration</strong><br>
+                    {'Upgrade from 11g to 19c using AutoUpgrade or DBUA. ' if is_db_11g else 'Upgrade from 12c to 19c using AutoUpgrade. '}
+                    Migrate into 19c PDB. Convert <code>UTL_FILE_DIR</code> to Oracle Directories. Migrate character sets to AL32UTF8 (if needed).
+                </div>
             </div>
-        </div>
-        <div class="rm-step">
-            <div class="rm-badge">Ph 5</div>
-            <div>
-                <strong>Continuous Innovation (12.2.14 / 12.2.15)</strong><br>
-                Apply the latest AD/TXK Delta packs in the run edition. Apply the 12.2.15 Release Update Pack (RUP). Re-integrate SSO, OAC, and ISG endpoints. Validate all integrations.
+            <div class="rm-step">
+                <div class="rm-badge">Ph 3</div>
+                <div>
+                    <strong>Application Upgrade (12.1.3 → 12.2.0 Base)</strong><br>
+                    Major version upgrade from 12.1.3 to 12.2.0 using AD leveling scripts. 
+                    Rapid Install the 12.2 File System via DB upgrade mode. Deploy dual-file system and WebLogic Server (WLS 10.3.6). Enable Online Patching (EBR).
+                </div>
             </div>
+            <div class="rm-step">
+                <div class="rm-badge">Ph 4</div>
+                <div>
+                    <strong>CEMLI Remediation (Customizations)</strong><br>
+                    Apply Online Patching logical columns to all custom tables. Re-compile Java/C executables natively on target OS. Remediate custom PL/SQL to Edition-based standards. Validate all custom objects.
+                </div>
+            </div>
+            <div class="rm-step">
+                <div class="rm-badge">Ph 5</div>
+                <div>
+                    <strong>Continuous Innovation (12.2.14 / 12.2.15)</strong><br>
+                    Apply the latest AD/TXK Delta packs in the run edition. Apply the 12.2.15 Release Update Pack (RUP). Re-integrate SSO, OAC, and ISG endpoints. Validate all integrations.
+                </div>
         </div>
     </div>
     
@@ -888,6 +1059,19 @@ def build_html(data):
     ad_files_by_type = safe_get(data, 'AD_FILES_BY_TYPE', [])
     patched_files_recent = safe_get(data, 'PATCHED_FILES_RECENT', [])
     
+    # Extract Tech Stack Versions for EBS 12.2.x environments
+    tech_stack_raw = safe_get(data, 'TECH_STACK_VERSIONS', [])
+    tech_stack_info = {}
+    for row in tech_stack_raw:
+        if len(row) >= 2 and row[0] and row[1]:
+            tech_stack_info[row[0]] = row[1]
+    
+    # Also extract AD/TXK versions for tech stack
+    ad_txk_versions = safe_get(data, 'AD_TXK_VERSIONS', [])
+    for row in ad_txk_versions:
+        if len(row) >= 2 and row[0] and row[1]:
+            tech_stack_info[row[0]] = row[1]
+    
     # CEMLI Extract: Custom Application Objects
     cemli_custom_apps = safe_get(data, 'CEMLI_CUSTOM_APPLICATIONS', [])
     cemli_custom_alerts = safe_get(data, 'CEMLI_CUSTOM_ALERTS', [])
@@ -1061,16 +1245,16 @@ def build_html(data):
         <a href="#executive">1. Executive Summary</a>
         <a href="#issues">2. Issues & Challenges</a>
         <a href="#roadmap">3. Upgrade Roadmap</a>
-        <a href="#cemli">4. CEMLI / Customization Impact</a>
-        <a href="#topology">5. Physical Architecture</a>
-        <a href="#wls_sizing">6. WLS Sizing & Context Services</a>
+        <a href="#topology">4. Physical Architecture</a>
+        <a href="#database">5. Database Configurations</a>
+        <a href="#wls_sizing">6. Application Configurations</a>
         <a href="#integrations">7. Enterprise Integrations</a>
-        <a href="#urlprofiles">8. URL Profiles & Endpoints</a>
-        <a href="#concurrent">9. Concurrent Programs & Requests</a>
-        <a href="#database">10. Database Analysis</a>
-        <a href="#workload">11. Performance & Processing</a>
-        <a href="#workflow">12. Fusion Middleware Components</a>
-        <a href="#functional">13. Functional Data Volumes</a>
+        <a href="#concurrent">8. Concurrent Programs</a>
+        <a href="#workload">9. Admin Specific</a>
+        <a href="#cemli">10. CEMLI / Customizations</a>
+        <a href="#functional">11. Functional Data Volumes</a>
+        <a href="#urlprofiles">12. URL Profiles & Endpoints</a>
+        <a href="#workflow">13. Workflow & Middleware</a>
         <a href="#risks">14. Risk Register</a>
     </div>
 
@@ -1150,7 +1334,7 @@ def build_html(data):
                 <h2>Target State Upgrade Roadmap</h2>
             </div>
             <p>A structured approach is required transitioning your <code>{ebs_version}</code> architecture (Database {db_version_info[1] if len(db_version_info)>1 else 'Unknown'}). The typical critical path for a full DB and App tier replacement on Oracle Linux 8/9 involves multiple phases.</p>
-            {build_roadmap(ebs_version, db_version_info[1] if len(db_version_info)>1 else '', is_rac, has_dataguard)}
+            {build_roadmap(ebs_version, db_version_info[1] if len(db_version_info)>1 else '', is_rac, has_dataguard, tech_stack_info)}
         </div>
 
         <div id="cemli" class="section">

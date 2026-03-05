@@ -189,92 +189,110 @@ select node_name ||'|appl_top|'|| EXTRACTVALUE(XMLType(TEXT),'(//APPL_TOP)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|common_top|'|| EXTRACTVALUE(XMLType(TEXT),'//COMMON_TOP')
+select node_name ||'|common_top|'|| EXTRACTVALUE(XMLType(TEXT),'(//COMMON_TOP)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|instance_top|'|| EXTRACTVALUE(XMLType(TEXT),'//INST_TOP')
+select node_name ||'|instance_top|'|| EXTRACTVALUE(XMLType(TEXT),'(//INST_TOP)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
     
 prompt [SECTION_END:CTX_DIRECTORIES]
 
 prompt [SECTION_START:CTX_PORTS_SECURITY]
-select node_name ||'|port_pool|'|| EXTRACTVALUE(XMLType(TEXT),'s_shared_file_system')
+select node_name ||'|port_pool|'|| EXTRACTVALUE(XMLType(TEXT),'(//PORT_POOL)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|port_pool|'|| EXTRACTVALUE(XMLType(TEXT),'//PORT_POOL')
+select node_name ||'|sslterminator|'|| EXTRACTVALUE(XMLType(TEXT),'(//s_shared_file_system)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|webport|'|| EXTRACTVALUE(XMLType(TEXT),'//web_port')
+select node_name ||'|webport|'|| EXTRACTVALUE(XMLType(TEXT),'(//webport)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|webssl_port|'|| EXTRACTVALUE(XMLType(TEXT),'(//web_ssl_port)')
+select node_name ||'|webssl_port|'|| EXTRACTVALUE(XMLType(TEXT),'(//webssl_port)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|Active_Port|'|| EXTRACTVALUE(XMLType(TEXT),'(//activewebport)')
+select node_name ||'|Active_Port|'|| EXTRACTVALUE(XMLType(TEXT),'(//activewebport)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
 prompt [SECTION_END:CTX_PORTS_SECURITY]
 
 prompt [SECTION_START:CTX_DB_NETWORKING]
-select node_name ||'|db_name|'|| EXTRACTVALUE(XMLType(TEXT),'(//dbSid)')
+select node_name ||'|db_name|'|| EXTRACTVALUE(XMLType(TEXT),'(//s_dbSid)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|db_host|'|| EXTRACTVALUE(XMLType(TEXT),'(//oa_system_name)')
+select node_name ||'|db_host|'|| EXTRACTVALUE(XMLType(TEXT),'(//s_dbhost)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|db_port|'|| EXTRACTVALUE(XMLType(TEXT),'(//dbport)')
+select node_name ||'|db_port|'|| EXTRACTVALUE(XMLType(TEXT),'(//s_dbport)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
+union all
+select node_name ||'|jdbc_url|'|| EXTRACTVALUE(XMLType(TEXT),'(//s_apps_jdbc_connect_descriptor)[1]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
+union all
+select node_name ||'|dbc_file|'|| EXTRACTVALUE(XMLType(TEXT),'(//s_apps_jdbc_alias)[1]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
 prompt [SECTION_END:CTX_DB_NETWORKING]
 
 prompt [SECTION_START:CTX_JVM_SERVICES]
-select node_name ||'|oacore_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//oacore_nprocs)')
+select node_name ||'|oacore_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//oacore_nprocs)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|forms_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//forms_nprocs)')
+select node_name ||'|forms_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//forms_nprocs)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
 union all
-select node_name ||'|oafm_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//oafm_nprocs)')
+select node_name ||'|oafm_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//oafm_nprocs)[1]')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
+union all
+select node_name ||'|oacore_jvm_options|'|| EXTRACTVALUE(XMLType(TEXT),'(//oacore_jvm_start_options)[1]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
 prompt [SECTION_END:CTX_JVM_SERVICES]
 
 prompt [SECTION_START:EBS_INTEGRATIONS_PROFILES]
@@ -535,13 +553,16 @@ ORDER BY 1;
 prompt [SECTION_END:CEMLI_OAF_PAGES]
 
 prompt [SECTION_START:CEMLI_OAF_PERSONALIZATIONS]
-SELECT DISTINCT jp.path_name ||'|'|| jp.the_path ||'|'|| jp.last_update_date
+SELECT DISTINCT jp.path_name ||'|'|| jp.the_path ||'|'|| TO_CHAR(jp.last_update_date, 'YYYY-MM-DD HH24:MI:SS')
 FROM (SELECT path_name, path_docid, path_type, sys_connect_by_path(path_name, '/') the_path,
              CONNECT_BY_ISLEAF is_leaf, created_by, last_update_date
       FROM apps.jdr_paths CONNECT BY path_owner_docid = PRIOR path_docid
       START WITH path_owner_docid = 0) jp
-WHERE jp.the_path LIKE '%customizations%' AND jp.is_leaf = 1 
-AND jp.path_type = 'DOCUMENT' AND jp.created_by NOT IN ('1');
+WHERE (LOWER(jp.the_path) LIKE '%customizations%' OR LOWER(jp.the_path) LIKE '%site%' OR LOWER(jp.the_path) LIKE '%/perz/%')
+AND jp.is_leaf = 1 
+AND jp.path_type = 'DOCUMENT' 
+AND jp.created_by NOT IN ('1', '-1')
+ORDER BY jp.last_update_date DESC;
 prompt [SECTION_END:CEMLI_OAF_PERSONALIZATIONS]
 
 prompt [SECTION_START:CEMLI_LOOKUPS]
@@ -766,6 +787,44 @@ from dual;
 select 'FND' ||'|'|| (select coalesce(patch_level,'UNKNOWN') from apps.fnd_product_installations where application_id = 0)
 from dual;
 prompt [SECTION_END:AD_TXK_VERSIONS]
+
+prompt [SECTION_START:TECH_STACK_VERSIONS]
+-- Extract WebLogic Server version from context files
+select 'WLS_VERSION' ||'|'|| EXTRACTVALUE(XMLType(TEXT),'(/oa_context/WLS_HOME/@version)[1]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A' 
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+and rownum = 1;
+-- Extract OHS version from context files  
+select 'OHS_VERSION' ||'|'|| EXTRACTVALUE(XMLType(TEXT),'(/oa_context/OHS_HOME/@version)[1]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+and rownum = 1;
+-- Extract Forms version from context files
+select 'FORMS_VERSION' ||'|'|| EXTRACTVALUE(XMLType(TEXT),'(/oa_context/FORMS_HOME/@version)[1]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+and rownum = 1;
+-- Extract Oracle Home base versions
+select 'ORACLE_HOME' ||'|'|| EXTRACTVALUE(XMLType(TEXT),'(//s_10205_oracle_home)[1]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+and rownum = 1;
+-- Extract JDK version
+select 'JDK_VERSION' ||'|'|| EXTRACTVALUE(XMLType(TEXT),'(//s_jdk_top)[1]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
+and rownum = 1;
+prompt [SECTION_END:TECH_STACK_VERSIONS]
 
 prompt [SECTION_START:DB_CHARACTER_SET]
 select parameter ||'|'|| value from nls_database_parameters where parameter in ('NLS_CHARACTERSET','NLS_NCHAR_CHARACTERSET','NLS_LANGUAGE','NLS_TERRITORY','NLS_DATE_FORMAT');
