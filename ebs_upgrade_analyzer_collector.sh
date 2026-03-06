@@ -252,17 +252,17 @@ and (node_name, last_update_date) in
 prompt [SECTION_END:CTX_DB_NETWORKING]
 
 prompt [SECTION_START:CTX_JVM_SERVICES]
-select node_name ||'|oacore_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oacore_nprocs"])[1]'), 'N/A') ||'|'|| 'N/A'
+select node_name ||'|oacore_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oacore_nprocs"])[1]'), 'N/A')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
     (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
-select node_name ||'|forms_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="forms_nprocs"])[1]'), 'N/A') ||'|'|| 'N/A'
+select node_name ||'|forms_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="forms_nprocs"])[1]'), 'N/A')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
     (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
-select node_name ||'|oafm_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oafm_nprocs"])[1]'), 'N/A') ||'|'|| 'N/A'
+select node_name ||'|oafm_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oafm_nprocs"])[1]'), 'N/A')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
