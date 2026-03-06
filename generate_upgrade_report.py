@@ -946,6 +946,7 @@ def build_html(data):
     ctx_ports = safe_get(data, 'CTX_PORTS_SECURITY', [])
     ctx_dbnet = safe_get(data, 'CTX_DB_NETWORKING', [])
     ctx_jvm = safe_get(data, 'CTX_JVM_SERVICES', [])
+    ctx_jvm_options = safe_get(data, 'CTX_JVM_OPTIONS', [])
     
     db_params = safe_get(data, 'DB_PARAMETERS', [])
     
@@ -1246,14 +1247,14 @@ def build_html(data):
         <a href="#issues">2. Issues & Challenges</a>
         <a href="#roadmap">3. Upgrade Roadmap</a>
         <a href="#topology">4. Physical Architecture</a>
-        <a href="#database">5. Database Configurations</a>
-        <a href="#wls_sizing">6. Application Configurations</a>
-        <a href="#integrations">7. Enterprise Integrations</a>
+        <a href="#wls_sizing">5. Application Configurations</a>
+        <a href="#integrations">6. Enterprise Integrations</a>
+        <a href="#urlprofiles">7. URL Profiles & Endpoints</a>
         <a href="#concurrent">8. Concurrent Programs</a>
-        <a href="#workload">9. Admin Specific</a>
-        <a href="#cemli">10. CEMLI / Customizations</a>
-        <a href="#functional">11. Functional Data Volumes</a>
-        <a href="#urlprofiles">12. URL Profiles & Endpoints</a>
+        <a href="#cemli">9. CEMLI / Customizations</a>
+        <a href="#database">10. Database Configurations</a>
+        <a href="#workload">11. Admin Specific</a>
+        <a href="#functional">12. Functional Data Volumes</a>
         <a href="#workflow">13. Workflow & Middleware</a>
         <a href="#risks">14. Risk Register</a>
     </div>
@@ -1335,6 +1336,153 @@ def build_html(data):
             </div>
             <p>A structured approach is required transitioning your <code>{ebs_version}</code> architecture (Database {db_version_info[1] if len(db_version_info)>1 else 'Unknown'}). The typical critical path for a full DB and App tier replacement on Oracle Linux 8/9 involves multiple phases.</p>
             {build_roadmap(ebs_version, db_version_info[1] if len(db_version_info)>1 else '', is_rac, has_dataguard, tech_stack_info)}
+        </div>
+
+        <div id="topology" class="section">
+            <div class="section-header">
+                <h2>Physical Topology & Contexts</h2>
+            </div>
+            
+            <h3>Application Node Definitions</h3>
+            {render_table(nodes, ["Registrar Hostname", "Batch/Concurrent", "Forms Service", "Web Service", "Data Node", "Current State"])}
+            
+        </div>
+        
+        <div id="wls_sizing" class="section">
+            <div class="section-header">
+                <h2>Application Configurations</h2>
+            </div>
+            <p>WebLogic domain deployment footprint and application configuration extracted from FND_OAM_CONTEXT_FILES across all nodes.</p>
+            
+            <h3>Application File Systems (Mount Directories)</h3>
+            {render_table(ctx_dirs, ["Physical Node", "EBS File System Variable", "Target Mount / Path Location"])}
+            
+            <h3>Target JVM Services & Memory Allocations</h3>
+            <p style="font-size:13px; color:#475569;">Metrics necessary to calculate required Managed Servers and Heap Sizing per Node (oacore, forms, oafm).</p>
+            {render_table(ctx_jvm, ["Physical Node", "WebLogic / Form Server Service", "Allocated NPROCS (Processes)"])}
+            
+            <h3>JVM Memory Options</h3>
+            <p style="font-size:13px; color:#475569;">JVM memory parameters extracted from context files: -XX:PermSize, -XX:MaxPermSize, -Xms, -Xmx.</p>
+            {render_table(ctx_jvm_options, ["Physical Node", "JVM Service", "Memory Options"])}
+            
+            <h3>Ports, Keystores & Security Connectors</h3>
+            {render_table(ctx_ports, ["Physical Node", "Configuration Property Name", "Value Resolved"])}
+            
+            <h3>Database Networking & JDBC Profiles</h3>
+            {render_table(ctx_dbnet, ["Physical Node", "Network Property Name", "JDBC Description or URL Profile"])}
+            
+            <h3>Recently Applied Patches (Last 180 Days)</h3>
+            {render_table(safe_get(data, 'AD_APPLIED_PATCHES_RECENT', []), ["Patch Name", "Patch Type", "Applied Date"])}
+            
+            <h3>Applied Patches (Last 90 Days - Detailed)</h3>
+            <p style="font-size:13px; color:#475569;">Comprehensive patch application history extracted from AD schema for recent upgrade activity tracking.</p>
+            {render_drilldown_table("View Applied Patches in Last 90 Days", applied_patches_90_days, ["Patch Name", "Last Update Date", "Applied Flag"])}
+            
+            <h3>PCP (Parallel Concurrent Processing) Distribution</h3>
+            {render_table(pcp_managers, ["Queue Routing ID", "Primary Node", "Failover Node"])}
+            
+            <h3>EBS Workloads and Footprints</h3>
+            {render_table(workload_statistics, ["Performance Category", "Count Output"])}
+        </div>
+
+        <div id="integrations" class="section">
+            <div class="section-header">
+                <h2>Enterprise Peripheral Integrations</h2>
+            </div>
+            <p>EBS relies intricately on external software portfolios. Profile values indicate what is actively connected vs unused.</p>
+            
+            <div class="grid-integrations">
+    """
+    for integ_name, integ_data in integrations.items():
+        color_var = integ_data['color']
+        status = integ_data['status']
+        desc = integ_data['desc']
+        roadmap = integ_data['roadmap']
+        html += f"""
+                <div class="integ-card" style="border-top-color: var({color_var})">
+                    <div class="integ-title">
+                        {integ_name}
+                        <span class="integ-status" style="background-color: var({color_var})">{status}</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">{desc}</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var({color_var})">
+                        <b>Upgrade Action:</b> {roadmap}
+                    </div>
+                </div>
+        """
+
+    html += f"""
+            </div>
+        </div>
+
+        <div id="urlprofiles" class="section">
+            <div class="section-header">
+                <h2>URL Profiles & Endpoints</h2>
+            </div>
+            <p>Critical URL profiles that define how users and integrations connect to the EBS application. These must be updated during upgrade and SSL/TLS configuration changes.</p>
+            
+            <h3>EBS URL Configuration Profiles</h3>
+            <p style="font-size:13px; color:#475569;">These site-level profile values control application URLs, authentication endpoints, and integration service locations. Review and update these profiles post-upgrade.</p>
+            {render_url_profiles_table(ebs_url_profiles)}
+        </div>
+
+        <div id="concurrent" class="section">
+            <div class="section-header">
+                <h2>Concurrent Programs & Requests</h2>
+            </div>
+            <p>Comprehensive analysis of concurrent processing workloads, custom concurrent programs, and execution patterns critical for upgrade planning.</p>
+            
+            <h3>Custom Concurrent Programs</h3>
+            <p style="font-size:13px; color:#475569;">Custom concurrent programs registered under custom applications (application_id >= 20000) or with XX% naming convention. These require testing and potential remediation during upgrade.</p>
+            {render_drilldown_table("View Custom Concurrent Programs", cemli_cp, ["Application", "Program Name", "Executable Name", "Execution Method"])}
+            
+            <h3>CEMLI: Concurrent Programs by Execution Type</h3>
+            <div class="grid-summary">
+                <div class="metric-card" style="border-left-color: var(--warning-amber)">
+                    <div class="metric-title">Host Programs</div>
+                    <div class="metric-value">{len(cemli_conc_host) if cemli_conc_host and cemli_conc_host[0][0] != 'N/A' else 0}</div>
+                    <div style="font-size:13px; color:#64748b;">Shell script executables</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--primary-blue)">
+                    <div class="metric-title">Java Concurrent</div>
+                    <div class="metric-value">{len(cemli_conc_java) if cemli_conc_java and cemli_conc_java[0][0] != 'N/A' else 0}</div>
+                    <div style="font-size:13px; color:#64748b;">Java stored procedures</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--danger-red)">
+                    <div class="metric-title">Oracle Reports</div>
+                    <div class="metric-value">{len(cemli_conc_reports) if cemli_conc_reports and cemli_conc_reports[0][0] != 'N/A' else 0}</div>
+                    <div style="font-size:13px; color:#64748b;">Reports executables - CRITICAL</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--success-green)">
+                    <div class="metric-title">SQL*Plus Programs</div>
+                    <div class="metric-value">{len(cemli_conc_sqlplus) if cemli_conc_sqlplus and cemli_conc_sqlplus[0][0] != 'N/A' else 0}</div>
+                    <div style="font-size:13px; color:#64748b;">SQL*Plus scripts</div>
+                </div>
+            </div>
+            
+            {render_drilldown_table("Host Programs Detail", cemli_conc_host, ["Application", "Program Name", "Executable", "Description"])}
+            {render_drilldown_table("Oracle Reports Detail", cemli_conc_reports, ["Application", "Program Name", "Executable", "Description"])}
+            {render_drilldown_table("SQL*Loader Programs Detail", cemli_conc_sqlloader, ["Application", "Program Name", "Executable", "Description"])}
+            
+            <h3>Concurrent Manager Queue Status</h3>
+            <p style="font-size:13px; color:#475569;">Current state of concurrent manager queues showing processing capacity and workload distribution.</p>
+            {render_table(conc_mgr_status, ["Queue ID", "Short Name", "Manager Name", "Target Node", "Max Allowed", "Running", "Run Tasks", "Pending Tasks", "Control State"])}
+            
+            <h3>Daily Concurrent Request Volume (30 Days)</h3>
+            <p style="font-size:13px; color:#475569;">Daily concurrent request counts showing workload patterns for capacity planning.</p>
+            {render_table(daily_conc_reqs, ["Execution Date", "Total Request Count"])}
+            
+            <h3>Top 100 Concurrent Programs by Execution Count (30 Days)</h3>
+            <p style="font-size:13px; color:#475569;">Most frequently executed programs - prioritize these for upgrade testing.</p>
+            {render_drilldown_table("View Top 100 by Execution", top_100_conc_by_exec, ["Program Name", "Total Executions"])}
+            
+            <h3>Top 100 Concurrent Programs by Average Run Time</h3>
+            <p style="font-size:13px; color:#475569;">Longest running programs - monitor for performance regression after upgrade.</p>
+            {render_drilldown_table("View Top 100 by Run Time", top_100_conc_by_time, ["Program Name", "Executions", "Avg Hours", "Max Hours", "Min Hours"])}
+            
+            <h3>Scheduled Concurrent Jobs</h3>
+            <p style="font-size:13px; color:#475569;">Currently scheduled jobs that will need validation post-upgrade.</p>
+            {render_drilldown_table("View Scheduled Jobs", scheduled_jobs, ["Request ID", "Parent ID", "Program Name", "Status", "Phase", "Schedule Type"])}
         </div>
 
         <div id="cemli" class="section">
@@ -1441,143 +1589,6 @@ def build_html(data):
             {render_drilldown_table("Data Definitions", cemli_data_definitions, ["App ID", "Data Source Code", "Data Source Name", "Description", "Application", "Status", "Created"])}
         </div>
 
-        <div id="topology" class="section">
-            <div class="section-header">
-                <h2>Physical Topology & Contexts</h2>
-            </div>
-            
-            <h3>Application Node Definitions</h3>
-            {render_table(nodes, ["Registrar Hostname", "Batch/Concurrent", "Forms Service", "Web Service", "Data Node", "Current State"])}
-            
-        </div>
-
-        <div id="infra" class="section">
-            <div class="section-header">
-                <h2>Infrastructure Component Counts</h2>
-            </div>
-            {render_drilldown_table("Scheduler Jobs, Materialized Views & Partitions", safe_get(data, 'INFRA_OBJECTS', []), ["Infrastructure Component", "Definition Count"])}
-        </div>
-        
-        <div id="wls_sizing" class="section">
-            <div class="section-header">
-                <h2>WLS Architecture Sizing & Java Context Parameters</h2>
-            </div>
-            <p>Target WebLogic domain deployment footprint extracted deeply from FND_OAM_CONTEXT_FILES across all nodes.</p>
-            
-            <h3>Application File Systems (Mount Directories)</h3>
-            {render_table(ctx_dirs, ["Physical Node", "EBS File System Variable", "Target Mount / Path Location"])}
-            
-            <h3>Target JVM Services & Memory Allocations</h3>
-            <p style="font-size:13px; color:#475569;">Metrics necessary to calculate required Managed Servers and Heap Sizing per Node (oacore, forms, oafm).</p>
-            {render_table(ctx_jvm, ["Physical Node", "WebLogic / Form Server Service", "Allocated NPROCS (Processes)", "Java JVM Start Parameters Options"])}
-            
-            <h3>Ports, Keystores & Security Connectors</h3>
-            {render_table(ctx_ports, ["Physical Node", "Configuration Property Name", "Value Resolved"])}
-            
-            <h3>Database Networking & JDBC Profiles</h3>
-            {render_table(ctx_dbnet, ["Physical Node", "Network Property Name", "JDBC Description or URL Profile"])}
-        </div>
-
-        <div id="integrations" class="section">
-            <div class="section-header">
-                <h2>Enterprise Peripheral Integrations</h2>
-            </div>
-            <p>EBS relies intricately on external software portfolios. Profile values indicate what is actively connected vs unused.</p>
-            
-            <div class="grid-integrations">
-    """
-    for integ_name, integ_data in integrations.items():
-        color_var = integ_data['color']
-        status = integ_data['status']
-        desc = integ_data['desc']
-        roadmap = integ_data['roadmap']
-        html += f"""
-                <div class="integ-card" style="border-top-color: var({color_var})">
-                    <div class="integ-title">
-                        {integ_name}
-                        <span class="integ-status" style="background-color: var({color_var})">{status}</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">{desc}</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var({color_var})">
-                        <b>Upgrade Action:</b> {roadmap}
-                    </div>
-                </div>
-        """
-
-    html += f"""
-            </div>
-        </div>
-
-        <div id="urlprofiles" class="section">
-            <div class="section-header">
-                <h2>URL Profiles & Endpoints</h2>
-            </div>
-            <p>Critical URL profiles that define how users and integrations connect to the EBS application. These must be updated during upgrade and SSL/TLS configuration changes.</p>
-            
-            <h3>EBS URL Configuration Profiles</h3>
-            <p style="font-size:13px; color:#475569;">These site-level profile values control application URLs, authentication endpoints, and integration service locations. Review and update these profiles post-upgrade.</p>
-            {render_url_profiles_table(ebs_url_profiles)}
-        </div>
-
-        <div id="concurrent" class="section">
-            <div class="section-header">
-                <h2>Concurrent Programs & Requests</h2>
-            </div>
-            <p>Comprehensive analysis of concurrent processing workloads, custom concurrent programs, and execution patterns critical for upgrade planning.</p>
-            
-            <h3>Custom Concurrent Programs</h3>
-            <p style="font-size:13px; color:#475569;">Custom concurrent programs registered under custom applications (application_id >= 20000) or with XX% naming convention. These require testing and potential remediation during upgrade.</p>
-            {render_drilldown_table("View Custom Concurrent Programs", cemli_cp, ["Application", "Program Name", "Executable Name", "Execution Method"])}
-            
-            <h3>CEMLI: Concurrent Programs by Execution Type</h3>
-            <div class="grid-summary">
-                <div class="metric-card" style="border-left-color: var(--warning-amber)">
-                    <div class="metric-title">Host Programs</div>
-                    <div class="metric-value">{len(cemli_conc_host) if cemli_conc_host and cemli_conc_host[0][0] != 'N/A' else 0}</div>
-                    <div style="font-size:13px; color:#64748b;">Shell script executables</div>
-                </div>
-                <div class="metric-card" style="border-left-color: var(--primary-blue)">
-                    <div class="metric-title">Java Concurrent</div>
-                    <div class="metric-value">{len(cemli_conc_java) if cemli_conc_java and cemli_conc_java[0][0] != 'N/A' else 0}</div>
-                    <div style="font-size:13px; color:#64748b;">Java stored procedures</div>
-                </div>
-                <div class="metric-card" style="border-left-color: var(--danger-red)">
-                    <div class="metric-title">Oracle Reports</div>
-                    <div class="metric-value">{len(cemli_conc_reports) if cemli_conc_reports and cemli_conc_reports[0][0] != 'N/A' else 0}</div>
-                    <div style="font-size:13px; color:#64748b;">Reports executables - CRITICAL</div>
-                </div>
-                <div class="metric-card" style="border-left-color: var(--success-green)">
-                    <div class="metric-title">SQL*Plus Programs</div>
-                    <div class="metric-value">{len(cemli_conc_sqlplus) if cemli_conc_sqlplus and cemli_conc_sqlplus[0][0] != 'N/A' else 0}</div>
-                    <div style="font-size:13px; color:#64748b;">SQL*Plus scripts</div>
-                </div>
-            </div>
-            
-            {render_drilldown_table("Host Programs Detail", cemli_conc_host, ["Application", "Program Name", "Executable", "Description"])}
-            {render_drilldown_table("Oracle Reports Detail", cemli_conc_reports, ["Application", "Program Name", "Executable", "Description"])}
-            {render_drilldown_table("SQL*Loader Programs Detail", cemli_conc_sqlloader, ["Application", "Program Name", "Executable", "Description"])}
-            
-            <h3>Concurrent Manager Queue Status</h3>
-            <p style="font-size:13px; color:#475569;">Current state of concurrent manager queues showing processing capacity and workload distribution.</p>
-            {render_table(conc_mgr_status, ["Queue ID", "Short Name", "Manager Name", "Target Node", "Max Allowed", "Running", "Run Tasks", "Pending Tasks", "Control State"])}
-            
-            <h3>Daily Concurrent Request Volume (30 Days)</h3>
-            <p style="font-size:13px; color:#475569;">Daily concurrent request counts showing workload patterns for capacity planning.</p>
-            {render_table(daily_conc_reqs, ["Execution Date", "Total Request Count"])}
-            
-            <h3>Top 100 Concurrent Programs by Execution Count (30 Days)</h3>
-            <p style="font-size:13px; color:#475569;">Most frequently executed programs - prioritize these for upgrade testing.</p>
-            {render_drilldown_table("View Top 100 by Execution", top_100_conc_by_exec, ["Program Name", "Total Executions"])}
-            
-            <h3>Top 100 Concurrent Programs by Average Run Time</h3>
-            <p style="font-size:13px; color:#475569;">Longest running programs - monitor for performance regression after upgrade.</p>
-            {render_drilldown_table("View Top 100 by Run Time", top_100_conc_by_time, ["Program Name", "Executions", "Avg Hours", "Max Hours", "Min Hours"])}
-            
-            <h3>Scheduled Concurrent Jobs</h3>
-            <p style="font-size:13px; color:#475569;">Currently scheduled jobs that will need validation post-upgrade.</p>
-            {render_drilldown_table("View Scheduled Jobs", scheduled_jobs, ["Request ID", "Parent ID", "Program Name", "Status", "Phase", "Schedule Type"])}
-        </div>
-
         <div id="database" class="section">
             <div class="section-header">
                 <h2>Database Deep-Dive Analysis</h2>
@@ -1660,24 +1671,18 @@ def build_html(data):
             <p style="font-size:13px; color:#475569;">Custom schemas (XX*, CUSTOM*) registered with Oracle AD utilities. These must be properly registered for online patching compatibility.</p>
             {render_table(safe_get(data, 'AD_REGISTERED_SCHEMAS', []), ["Schema Name", "Read Only"])}
             
-            <h3>Recently Applied Patches (Last 180 Days)</h3>
-            {render_table(safe_get(data, 'AD_APPLIED_PATCHES_RECENT', []), ["Patch Name", "Patch Type", "Applied Date"])}
-            
-            <h3>Applied Patches (Last 90 Days - Detailed)</h3>
-            <p style="font-size:13px; color:#475569;">Comprehensive patch application history extracted from AD schema for recent upgrade activity tracking.</p>
-            {render_drilldown_table("View Applied Patches in Last 90 Days", applied_patches_90_days, ["Patch Name", "Last Update Date", "Applied Flag"])}
-            
             <h3>Database Links Detail</h3>
             {render_table(safe_get(data, 'DB_LINKS_DETAIL', []), ["Owner", "DB Link Name", "Host"])}
+            
+            <h3>Scheduler Jobs, Materialized Views & Partitions</h3>
+            <p style="font-size:13px; color:#475569;">Database infrastructure components excluding standard APPS-specific objects. Custom scheduler jobs and MVs may require review during upgrade.</p>
+            {render_drilldown_table("View Infrastructure Components", safe_get(data, 'INFRA_OBJECTS', []), ["Infrastructure Component", "Definition Count"])}
         </div>
 
         <div id="workload" class="section">
             <div class="section-header">
-                <h2>Database Workloads, High Availability & Process Engineering</h2>
+                <h2>Admin Specific</h2>
             </div>
-            
-            <h3>PCP (Parallel Concurrent Processing) Distribution</h3>
-            {render_table(pcp_managers, ["Queue Routing ID", "Primary Node", "Failover Node"])}
             
             <h3>Top 10 Heaviest Database Segments</h3>
             <p style="font-size:13px; color:#475569;">Storage engineering constraints for tablespace reorganizations.</p>
@@ -1695,13 +1700,6 @@ def build_html(data):
             <h3>Oracle Database Enterprise Feature Licensing</h3>
             <p style="font-size:13px; color:#475569;">Flags what native engine plugins are enabled for accurate cloud commercial modeling (e.g. Partitioning, Advanced Compression).</p>
             {render_table(db_feature_usage, ["Feature Module Name", "Active", "First Seen", "Last Known Poll"])}
-
-            <h3>Infrastructure Engine Design</h3>
-            <p style="font-size:13px; color:#475569;">Scheduler objects that require careful handling during OS migration and upgrades.</p>
-            {render_table(infra_objects, ["Object Classification", "Volumes Configured"])}
-
-            <h3>System Workloads & Footprints</h3>
-            {render_table(workload_statistics, ["Performance Category", "Count Output"])}
 
             <h3>Raw Init.ora Parameters Evaluated</h3>
             {render_table(db_params, ["Init Parameter", "Assigned Boundary"])}
@@ -1846,10 +1844,6 @@ def build_html(data):
             <h3>Profile Options Changed (Last 48 Hours)</h3>
             <p style="font-size:13px; color:#475569;">Recent profile option changes that may indicate active configuration or troubleshooting activities.</p>
             {render_drilldown_table("View Profile Changes", profile_changes_48h, ["Profile Name", "User Profile Name", "Level", "Value", "Changed At", "Changed By"])}
-            
-            <h3>Applied Patches (Last 30 Days)</h3>
-            <p style="font-size:13px; color:#475569;">Recent patch application history for tracking upgrade and maintenance activities.</p>
-            {render_drilldown_table("View Applied Patches", applied_patches_30d, ["Patch Name", "Patch Type", "Applied Date", "Applied Flag"])}
         </div>
 
         <div id="risks" class="section">
