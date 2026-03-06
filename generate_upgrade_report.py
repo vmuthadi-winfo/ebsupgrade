@@ -946,6 +946,7 @@ def build_html(data):
     ctx_ports = safe_get(data, 'CTX_PORTS_SECURITY', [])
     ctx_dbnet = safe_get(data, 'CTX_DB_NETWORKING', [])
     ctx_jvm = safe_get(data, 'CTX_JVM_SERVICES', [])
+    ctx_jvm_options = safe_get(data, 'CTX_JVM_OPTIONS', [])
     
     db_params = safe_get(data, 'DB_PARAMETERS', [])
     
@@ -1243,19 +1244,15 @@ def build_html(data):
 
     <div class="nav-sidebar">
         <a href="#executive">1. Executive Summary</a>
-        <a href="#issues">2. Issues & Challenges</a>
-        <a href="#roadmap">3. Upgrade Roadmap</a>
-        <a href="#topology">4. Physical Architecture</a>
-        <a href="#database">5. Database Configurations</a>
-        <a href="#wls_sizing">6. Application Configurations</a>
-        <a href="#integrations">7. Enterprise Integrations</a>
-        <a href="#concurrent">8. Concurrent Programs</a>
-        <a href="#workload">9. Admin Specific</a>
-        <a href="#cemli">10. CEMLI / Customizations</a>
-        <a href="#functional">11. Functional Data Volumes</a>
-        <a href="#urlprofiles">12. URL Profiles & Endpoints</a>
-        <a href="#workflow">13. Workflow & Middleware</a>
-        <a href="#risks">14. Risk Register</a>
+        <a href="#environment">2. Environment Overview</a>
+        <a href="#infrastructure">3. Infrastructure View</a>
+        <a href="#database">4. Database Summary</a>
+        <a href="#alerts">5. Database Alerts & Issues</a>
+        <a href="#techstack">6. Application TechStack</a>
+        <a href="#appconfig">7. Application Configurations</a>
+        <a href="#workflow">8. Workflows & Integrations</a>
+        <a href="#cemli">9. CEMLIs & Customizations</a>
+        <a href="#risks">10. Risk Register</a>
     </div>
 
     <a href="#" id="backToTop" title="Back to Top" style="display:none; position:fixed; bottom:30px; right:30px; background:var(--primary-blue); color:white; padding:15px; border-radius:50%; text-decoration:none; font-weight:bold; z-index:999; box-shadow:0 4px 10px rgba(0,0,0,0.2);">↑</a>
@@ -1309,280 +1306,70 @@ def build_html(data):
             </div>
         </div>
 
-        <div id="issues" class="section">
+        <!-- SECTION 2: Environment Overview -->
+        <div id="environment" class="section">
             <div class="section-header">
-                <h2>Potential Issues & Technical Challenges</h2>
+                <h2>Environment Overview</h2>
             </div>
-            <p>Based on the extracted data, the rules engine has identified the following critical roadblocks that must be resolved prior to finalizing the EBS 12.2.15/DB 19c transition architecture.</p>
+            <p>Current environment configuration and target state upgrade roadmap for the EBS and Database transition.</p>
             
-            <div class="challenges-box">
-                <ul>
-                    {''.join(f'<li>{c}</li>' for c in rules_challenges) if rules_challenges else '<li>No critical rule violations detected from parsed parameter footprint.</li>'}
-                </ul>
+            <div class="grid-summary">
+                <div class="metric-card">
+                    <div class="metric-title">Operating System</div>
+                    <div class="metric-value" style="font-size:22px;">{os_info.get('OS_RELEASE', 'Unknown')}</div>
+                    <div style="font-size:13px; color:#64748b;">Kernel: {os_info.get('KERNEL', 'Unknown')}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Total CPU Cores</div>
+                    <div class="metric-value">{os_info.get('TOTAL_CPU_CORES', 'N/A')}</div>
+                    <div style="font-size:13px; color:#64748b;">Available compute capacity</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Total Memory</div>
+                    <div class="metric-value">{os_info.get('TOTAL_MEMORY_GB', 'N/A')} GB</div>
+                    <div style="font-size:13px; color:#64748b;">System RAM allocation</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Database Size</div>
+                    <div class="metric-value">{db_size} GB</div>
+                    <div style="font-size:13px; color:#64748b;">Total data footprint</div>
+                </div>
             </div>
             
-            <h3 style="margin-top:20px;">Support Notes & Best Practices</h3>
-            <ul style="color: #334155; padding-left: 20px;">
-                <li style="margin-bottom: 8px;"><b>Best Practice:</b> Isolate custom database schemas into dedicated tablespaces separate from standard APPS data to simplify Edition-based Redefinition.</li>
-                <li style="margin-bottom: 8px;"><b>Best Practice:</b> Convert entirely to <code>txkCreateDirObject.sql</code> database directories before migrating the middle tier (MOS 2552181.1).</li>
-                <li style="margin-bottom: 8px;"><b>Best Practice:</b> If utilizing Oracle 23ai targets, thoroughly test bespoke PL/SQL for JSON relational duality interactions mapping against standard EBS tables (MOS 3042045.1).</li>
-            </ul>
-        </div>
-
-        <div id="roadmap" class="section">
-            <div class="section-header">
-                <h2>Target State Upgrade Roadmap</h2>
-            </div>
+            <h3>Target State Upgrade Roadmap</h3>
             <p>A structured approach is required transitioning your <code>{ebs_version}</code> architecture (Database {db_version_info[1] if len(db_version_info)>1 else 'Unknown'}). The typical critical path for a full DB and App tier replacement on Oracle Linux 8/9 involves multiple phases.</p>
             {build_roadmap(ebs_version, db_version_info[1] if len(db_version_info)>1 else '', is_rac, has_dataguard, tech_stack_info)}
         </div>
 
-        <div id="cemli" class="section">
+        <!-- SECTION 3: Infrastructure View -->
+        <div id="infrastructure" class="section">
             <div class="section-header">
-                <h2>Application Extension (CEMLI) Impact Analysis</h2>
+                <h2>Infrastructure View</h2>
             </div>
-            <p>EBS 12.2 radically changes the Middle-tier. The Oracle 10.1.3 OC4J engine is entirely replaced by WebLogic Server (WLS 10.3.6+). Any custom Application code (Java, OAF, C, Perl) currently deployed on your App server must be rebuilt, recompiled, or heavily remediated.</p>
-            
-            <div class="cemli-grid">
-                <div class="cemli-item">
-                    <div class="cemli-num">{forms_count}</div>
-                    <div class="cemli-label">Custom Oracle Forms</div>
-                </div>
-                <div class="cemli-item">
-                    <div class="cemli-num">{oaf_count}</div>
-                    <div class="cemli-label">OAF Mds Personalizations</div>
-                </div>
-                <div class="cemli-item" style="border-top: 5px solid var(--warning-amber);">
-                    <div class="cemli-num">{safe_get(data, 'APP_CUSTOM_FILES', [['0', '0']])[1][1] if len(safe_get(data, 'APP_CUSTOM_FILES', [])) > 1 else '0'}</div>
-                    <div class="cemli-label">Rogue HTML/image Overrides</div>
-                </div>
-                <div class="cemli-item" style="border-top: 5px solid var(--danger-red);">
-                    <div class="cemli-num">{safe_get(data, 'APP_CUSTOM_FILES', [['0', '0']])[3][1] if len(safe_get(data, 'APP_CUSTOM_FILES', [])) > 3 else '0'}</div>
-                    <div class="cemli-label">Custom Java Class Drops</div>
-                </div>
-            </div>
-
-            <h3>Concurrent Program Technical Debt</h3>
-            <p style="color:red; font-size:13px; font-weight:600; margin-top:0;">&#9888; Action Required: All 'Java' and 'Spawned' (C/C++) executables must be recompiled on the target OS. See <a href="#concurrent">Concurrent Programs & Requests</a> section for full details.</p>
-            {render_drilldown_table("Custom Concurrent Programs List", cemli_cp, ["Application Module", "Program Name", "Executable Name", "Execution Method"])}
-            
-            <h3>Forms & OAF Modifications</h3>
-            {render_drilldown_table("Custom Oracle Forms (fmb)", safe_get(data, 'CEMLI_FORMS_AND_PAGES', []), ["Application Module", "Form Name", "User Form Name"])}
-            
-            <h3>Custom OAF Pages</h3>
-            <p style="font-size:13px; color:#475569;">Custom OAF pages with controller classes and AM definitions. These require JDeveloper recompilation for EBS 12.2.</p>
-            {render_drilldown_table("Custom OAF Page Components", cemli_oaf_pages, ["Page Name", "Full Path", "Attribute Name", "Attribute Value"])}
-            
-            <h3>OAF Personalizations / Customizations</h3>
-            <p style="font-size:13px; color:#475569;">MDS-based personalizations applied to standard OAF pages. These must be validated post-upgrade.</p>
-            {render_drilldown_table("OAF Personalizations", cemli_oaf_personalizations, ["Document Name", "Full Path", "Last Update Date"])}
-
-            <h3>Custom FND Objects (Detailed)</h3>
-            <p style="font-size:13px; color:#475569;">Comprehensive breakdown of custom FND objects by type with application ownership.</p>
-            
-            {render_drilldown_table("Custom Lookups", cemli_lookups, ["App ID", "Lookup Type", "Application Name", "Meaning"])}
-            {render_drilldown_table("Custom Menus", cemli_menus, ["Menu ID", "Menu Name", "User Menu Name", "Application Name"])}
-            {render_drilldown_table("Custom Messages", cemli_messages, ["App ID", "Message Name", "Application Name", "Message Text"])}
-            {render_drilldown_table("Custom Profiles", cemli_profiles, ["Profile ID", "Profile Name", "User Profile Name", "Application Name"])}
-            {render_drilldown_table("Custom Request Groups", cemli_request_groups, ["Group ID", "Group Name", "Application Name", "Description"])}
-            {render_drilldown_table("Custom Request Sets", cemli_request_sets, ["Set ID", "Set Name", "User Set Name", "Application Name"])}
-            {render_drilldown_table("Custom Value Sets", cemli_value_sets, ["Value Set ID", "Value Set Name", "Description", "Validation Type"])}
-
-            <h3>Other Customized Core Components</h3>
-            {render_drilldown_table("Custom Workflow Definitions", custom_workflows, ["Item Type", "Display Name"])}
-            {render_drilldown_table("BIP / XML Publisher Templates", xml_publisher, ["XML Template Code", "Output Type"])}
-            
-            <h3>Flagged Files for Upgrade Analysis</h3>
-            <p style="font-size:13px; color:#475569;">Custom files tracked in AD schema that require review and potential remediation during upgrade. These include XX-prefixed files and files in custom directories.</p>
-            {render_drilldown_table("View Flagged Custom Files (AD_FILES)", flagged_files, ["Application", "Directory", "Filename", "Version", "Translation Level", "Version Date"])}
-            
-            <h3>Custom Application Tops</h3>
-            <p style="font-size:13px; color:#475569;">Registered custom APPL_TOP directories that may contain custom code requiring migration.</p>
-            {render_table(custom_top_files, ["APPL_TOP Name", "Base Path", "Applications System"])}
-            
-            <h3>Custom Files Distribution by Type</h3>
-            <p style="font-size:13px; color:#475569;">Breakdown of custom file extensions to identify file types requiring specific remediation (e.g., .fmb, .pll, .class, .java).</p>
-            {render_table(ad_files_by_type, ["File Extension", "Count"])}
-            
-            <h3>Recently Patched Files (Last 90 Days)</h3>
-            <p style="font-size:13px; color:#475569;">Files modified by recent patches that may impact custom code dependencies.</p>
-            {render_drilldown_table("View Recently Patched Files", patched_files_recent, ["Application", "Filename", "Patch Name", "Applied Date"])}
-            
-            <h3>CEMLI: Custom Applications</h3>
-            <p style="font-size:13px; color:#475569;">Registered custom applications in FND_APPLICATION that require migration.</p>
-            {render_drilldown_table("View Custom Applications", cemli_custom_apps, ["App ID", "Application Name", "Short Name", "Base Path", "Created Date"])}
-            
-            <h3>CEMLI: Custom Alerts</h3>
-            {render_drilldown_table("View Custom Alerts", cemli_custom_alerts, ["Alert Name", "Application Name", "Alert Type", "Status"])}
-            
-            <h3>CEMLI: Custom Database Objects</h3>
-            <p style="font-size:13px; color:#475569;">Custom database objects (XX-prefixed or in custom schemas) that require EBR enablement and validation.</p>
-            {render_drilldown_table("Custom Functions", cemli_db_functions, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
-            {render_drilldown_table("Custom Packages", cemli_db_packages, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
-            {render_drilldown_table("Custom Procedures", cemli_db_procedures, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
-            {render_drilldown_table("Custom Tables", cemli_db_tables, ["Table Name", "Owner", "Tablespace", "Num Rows", "Partitioned", "Created"])}
-            {render_drilldown_table("Custom Views", cemli_db_views, ["View Name", "Owner", "Status", "Created", "Last DDL"])}
-            {render_drilldown_table("Custom Indexes", cemli_db_indexes, ["Index Name", "Type", "Owner", "Status", "Table Name", "Uniqueness"])}
-            {render_drilldown_table("Custom Sequences", cemli_db_sequences, ["Sequence Name", "Owner", "Min Value", "Max Value", "Increment", "Last Number"])}
-            {render_drilldown_table("Custom Synonyms", cemli_db_synonyms, ["Synonym Name", "Owner", "Table Owner", "Table Name", "DB Link"])}
-            {render_drilldown_table("Custom Triggers", cemli_db_triggers, ["Trigger Name", "Owner", "Table Owner", "Table Name", "Event", "Status"])}
-            {render_drilldown_table("Custom Types", cemli_db_types, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
-            {render_drilldown_table("Custom Materialized Views", cemli_db_mviews, ["MView Name", "Owner", "Container", "Refresh Mode", "Refresh Method", "Staleness"])}
-            {render_drilldown_table("Custom Queues", cemli_db_queues, ["Queue Name", "Owner", "Queue Table", "Type", "Enqueue", "Dequeue"])}
-            {render_drilldown_table("Custom LOB Segments", cemli_db_lobs, ["Table Name", "Column Name", "Owner", "Segment Name", "Tablespace", "Chunk Size"])}
-            
-            <h3>CEMLI: Custom Workflows</h3>
-            <p style="font-size:13px; color:#475569;">Custom workflow item types and processes requiring validation post-upgrade.</p>
-            {render_drilldown_table("Custom Workflow Definitions", cemli_workflows, ["Item Type", "Display Name", "Persistence Type", "Persistence Days", "Activity Count"])}
-            
-            <h3>CEMLI: Custom Reporting Objects (XML Publisher / BI Publisher)</h3>
-            <p style="font-size:13px; color:#475569;">Custom XML/BI Publisher templates and data definitions requiring migration and testing.</p>
-            {render_drilldown_table("XML Publisher Templates", cemli_xml_templates, ["App ID", "Template Code", "Template Name", "Description", "Application", "Type", "Status"])}
-            {render_drilldown_table("Data Definitions", cemli_data_definitions, ["App ID", "Data Source Code", "Data Source Name", "Description", "Application", "Status", "Created"])}
-        </div>
-
-        <div id="topology" class="section">
-            <div class="section-header">
-                <h2>Physical Topology & Contexts</h2>
-            </div>
+            <p>Physical topology, application nodes, and infrastructure sizing recommendations.</p>
             
             <h3>Application Node Definitions</h3>
             {render_table(nodes, ["Registrar Hostname", "Batch/Concurrent", "Forms Service", "Web Service", "Data Node", "Current State"])}
             
+            <h3>Target Sizing & Capacity Recommendations</h3>
+            <p>EBS 12.2 and Database 19c introduce new memory structures. The following architecture sizing is dynamically modeled on your extracted usage and hardware metrics:</p>
+            {sizing_analytics}
+            
+            <h3>Infrastructure Sizing Best Practices</h3>
+            <ul style="color: #334155; padding-left: 20px;">
+                <li style="margin-bottom: 8px;"><b>Weblogic Managed Servers (oacore):</b> Do not exceed 4GB per oacore Managed Server footprint due to JVM Garbage Collection pause limits. Scale out horizontally by adding more processes when active user concurrency peaks beyond capacity.</li>
+                <li style="margin-bottom: 8px;"><b>Output Post Processor (OPP):</b> For heavy XML Publisher loads (like large invoices), size the FNDCPOPP manager correctly per node. The recommended minimum is 2048MB per target process heap size via Context File updates.</li>
+                <li style="margin-bottom: 8px;"><b>Oracle Forms Heap:</b> 12.2 shifts Forms to the WLS architecture. Expect +30% server-side memory footprint per active Form session than what was seen under 11g/12.1.</li>
+                <li style="margin-bottom: 8px;"><b>Linux Database HugePages:</b> Whenever Target DB Memory (SGA) exceeds 30GB, enabling Linux HugePages is strictly required to prevent catastrophic kernel CPU swapping on Enterprise systems allocating 19c limits.</li>
+            </ul>
         </div>
 
-        <div id="infra" class="section">
-            <div class="section-header">
-                <h2>Infrastructure Component Counts</h2>
-            </div>
-            {render_drilldown_table("Scheduler Jobs, Materialized Views & Partitions", safe_get(data, 'INFRA_OBJECTS', []), ["Infrastructure Component", "Definition Count"])}
-        </div>
-        
-        <div id="wls_sizing" class="section">
-            <div class="section-header">
-                <h2>WLS Architecture Sizing & Java Context Parameters</h2>
-            </div>
-            <p>Target WebLogic domain deployment footprint extracted deeply from FND_OAM_CONTEXT_FILES across all nodes.</p>
-            
-            <h3>Application File Systems (Mount Directories)</h3>
-            {render_table(ctx_dirs, ["Physical Node", "EBS File System Variable", "Target Mount / Path Location"])}
-            
-            <h3>Target JVM Services & Memory Allocations</h3>
-            <p style="font-size:13px; color:#475569;">Metrics necessary to calculate required Managed Servers and Heap Sizing per Node (oacore, forms, oafm).</p>
-            {render_table(ctx_jvm, ["Physical Node", "WebLogic / Form Server Service", "Allocated NPROCS (Processes)", "Java JVM Start Parameters Options"])}
-            
-            <h3>Ports, Keystores & Security Connectors</h3>
-            {render_table(ctx_ports, ["Physical Node", "Configuration Property Name", "Value Resolved"])}
-            
-            <h3>Database Networking & JDBC Profiles</h3>
-            {render_table(ctx_dbnet, ["Physical Node", "Network Property Name", "JDBC Description or URL Profile"])}
-        </div>
-
-        <div id="integrations" class="section">
-            <div class="section-header">
-                <h2>Enterprise Peripheral Integrations</h2>
-            </div>
-            <p>EBS relies intricately on external software portfolios. Profile values indicate what is actively connected vs unused.</p>
-            
-            <div class="grid-integrations">
-    """
-    for integ_name, integ_data in integrations.items():
-        color_var = integ_data['color']
-        status = integ_data['status']
-        desc = integ_data['desc']
-        roadmap = integ_data['roadmap']
-        html += f"""
-                <div class="integ-card" style="border-top-color: var({color_var})">
-                    <div class="integ-title">
-                        {integ_name}
-                        <span class="integ-status" style="background-color: var({color_var})">{status}</span>
-                    </div>
-                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">{desc}</p>
-                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var({color_var})">
-                        <b>Upgrade Action:</b> {roadmap}
-                    </div>
-                </div>
-        """
-
-    html += f"""
-            </div>
-        </div>
-
-        <div id="urlprofiles" class="section">
-            <div class="section-header">
-                <h2>URL Profiles & Endpoints</h2>
-            </div>
-            <p>Critical URL profiles that define how users and integrations connect to the EBS application. These must be updated during upgrade and SSL/TLS configuration changes.</p>
-            
-            <h3>EBS URL Configuration Profiles</h3>
-            <p style="font-size:13px; color:#475569;">These site-level profile values control application URLs, authentication endpoints, and integration service locations. Review and update these profiles post-upgrade.</p>
-            {render_url_profiles_table(ebs_url_profiles)}
-        </div>
-
-        <div id="concurrent" class="section">
-            <div class="section-header">
-                <h2>Concurrent Programs & Requests</h2>
-            </div>
-            <p>Comprehensive analysis of concurrent processing workloads, custom concurrent programs, and execution patterns critical for upgrade planning.</p>
-            
-            <h3>Custom Concurrent Programs</h3>
-            <p style="font-size:13px; color:#475569;">Custom concurrent programs registered under custom applications (application_id >= 20000) or with XX% naming convention. These require testing and potential remediation during upgrade.</p>
-            {render_drilldown_table("View Custom Concurrent Programs", cemli_cp, ["Application", "Program Name", "Executable Name", "Execution Method"])}
-            
-            <h3>CEMLI: Concurrent Programs by Execution Type</h3>
-            <div class="grid-summary">
-                <div class="metric-card" style="border-left-color: var(--warning-amber)">
-                    <div class="metric-title">Host Programs</div>
-                    <div class="metric-value">{len(cemli_conc_host) if cemli_conc_host and cemli_conc_host[0][0] != 'N/A' else 0}</div>
-                    <div style="font-size:13px; color:#64748b;">Shell script executables</div>
-                </div>
-                <div class="metric-card" style="border-left-color: var(--primary-blue)">
-                    <div class="metric-title">Java Concurrent</div>
-                    <div class="metric-value">{len(cemli_conc_java) if cemli_conc_java and cemli_conc_java[0][0] != 'N/A' else 0}</div>
-                    <div style="font-size:13px; color:#64748b;">Java stored procedures</div>
-                </div>
-                <div class="metric-card" style="border-left-color: var(--danger-red)">
-                    <div class="metric-title">Oracle Reports</div>
-                    <div class="metric-value">{len(cemli_conc_reports) if cemli_conc_reports and cemli_conc_reports[0][0] != 'N/A' else 0}</div>
-                    <div style="font-size:13px; color:#64748b;">Reports executables - CRITICAL</div>
-                </div>
-                <div class="metric-card" style="border-left-color: var(--success-green)">
-                    <div class="metric-title">SQL*Plus Programs</div>
-                    <div class="metric-value">{len(cemli_conc_sqlplus) if cemli_conc_sqlplus and cemli_conc_sqlplus[0][0] != 'N/A' else 0}</div>
-                    <div style="font-size:13px; color:#64748b;">SQL*Plus scripts</div>
-                </div>
-            </div>
-            
-            {render_drilldown_table("Host Programs Detail", cemli_conc_host, ["Application", "Program Name", "Executable", "Description"])}
-            {render_drilldown_table("Oracle Reports Detail", cemli_conc_reports, ["Application", "Program Name", "Executable", "Description"])}
-            {render_drilldown_table("SQL*Loader Programs Detail", cemli_conc_sqlloader, ["Application", "Program Name", "Executable", "Description"])}
-            
-            <h3>Concurrent Manager Queue Status</h3>
-            <p style="font-size:13px; color:#475569;">Current state of concurrent manager queues showing processing capacity and workload distribution.</p>
-            {render_table(conc_mgr_status, ["Queue ID", "Short Name", "Manager Name", "Target Node", "Max Allowed", "Running", "Run Tasks", "Pending Tasks", "Control State"])}
-            
-            <h3>Daily Concurrent Request Volume (30 Days)</h3>
-            <p style="font-size:13px; color:#475569;">Daily concurrent request counts showing workload patterns for capacity planning.</p>
-            {render_table(daily_conc_reqs, ["Execution Date", "Total Request Count"])}
-            
-            <h3>Top 100 Concurrent Programs by Execution Count (30 Days)</h3>
-            <p style="font-size:13px; color:#475569;">Most frequently executed programs - prioritize these for upgrade testing.</p>
-            {render_drilldown_table("View Top 100 by Execution", top_100_conc_by_exec, ["Program Name", "Total Executions"])}
-            
-            <h3>Top 100 Concurrent Programs by Average Run Time</h3>
-            <p style="font-size:13px; color:#475569;">Longest running programs - monitor for performance regression after upgrade.</p>
-            {render_drilldown_table("View Top 100 by Run Time", top_100_conc_by_time, ["Program Name", "Executions", "Avg Hours", "Max Hours", "Min Hours"])}
-            
-            <h3>Scheduled Concurrent Jobs</h3>
-            <p style="font-size:13px; color:#475569;">Currently scheduled jobs that will need validation post-upgrade.</p>
-            {render_drilldown_table("View Scheduled Jobs", scheduled_jobs, ["Request ID", "Parent ID", "Program Name", "Status", "Phase", "Schedule Type"])}
-        </div>
-
+        <!-- SECTION 4: Database Summary -->
         <div id="database" class="section">
             <div class="section-header">
-                <h2>Database Deep-Dive Analysis</h2>
+                <h2>Database Summary</h2>
             </div>
-            <p>Comprehensive database analysis including character set, tablespace distribution, and database features usage.</p>
+            <p>Comprehensive database analysis including version, character set, RAC configuration, and tablespace distribution.</p>
             
             <h3>RAC (Real Application Clusters) Configuration</h3>
             <div class="grid-summary">
@@ -1610,31 +1397,17 @@ def build_html(data):
             {render_table(rac_database_info, ["Property", "Value"])}
             
             <h3>RAC Instance Parameters</h3>
-            <p style="font-size:13px; color:#475569;">Critical init parameters per RAC instance. Parameters like SGA, PGA, and undo tablespace may differ between instances.</p>
+            <p style="font-size:13px; color:#475569;">Critical init parameters per RAC instance.</p>
             {render_drilldown_table("View RAC Instance Parameters", rac_instance_params, ["Instance ID", "Parameter Name", "Value", "Is Default"])}
             
             <h3>Cluster Interconnect Configuration</h3>
-            <p style="font-size:13px; color:#475569;">Private interconnect network used for cache fusion and inter-instance communication.</p>
             {render_table(rac_interconnect, ["Instance ID", "Interface Name", "IP Address", "Is Public", "Source"])}
             
             <h3>RAC Services</h3>
-            <p style="font-size:13px; color:#475569;">Database services configured for workload management and failover.</p>
             {render_drilldown_table("View RAC Services", rac_services, ["Instance ID", "Service Name", "Network Name", "Enabled", "AQ HA Notifications", "CLB Goal", "Goal"])}
             
-            <h3>SCAN & Local Listeners</h3>
-            {render_table(rac_scan_listeners, ["Listener Type", "Configuration"])}
-            
             <h3>ASM Disk Groups</h3>
-            <p style="font-size:13px; color:#475569;">Automatic Storage Management disk groups used for database storage.</p>
             {render_table(rac_asm_diskgroups, ["Disk Group Name", "State", "Type", "Total MB", "Free MB", "% Free"])}
-            
-            <h3>RAC Redo Log Threads</h3>
-            <p style="font-size:13px; color:#475569;">Redo log groups by thread - each RAC instance has its own redo thread.</p>
-            {render_table(rac_thread_redo, ["Thread #", "Group #", "Members", "Size (MB)", "Status", "Archived"])}
-            
-            <h3>Global Cache Statistics</h3>
-            <p style="font-size:13px; color:#475569;">Cache fusion statistics for inter-instance block transfers. High values indicate active inter-node communication.</p>
-            {render_drilldown_table("View Global Cache Statistics", rac_gv_sysstat, ["Instance ID", "Statistic Name", "Value"])}
         """
     
     html += f"""
@@ -1650,8 +1423,41 @@ def build_html(data):
             <h3>Archive Mode & Logging</h3>
             {render_table(safe_get(data, 'DB_ARCHIVE_MODE', []), ["Log Mode", "Force Logging", "Supplemental Log"])}
             
-            <h3>Total EBS Customization Catalog</h3>
-            {render_drilldown_table("View Core Custom Database Extensions", safe_get(data, 'EBS_CUSTOM_OBJECTS', []), ["Custom Schema Owner", "Database Object Type", "Quantity Defined"])}
+            <h3>Database Links Detail</h3>
+            {render_table(safe_get(data, 'DB_LINKS_DETAIL', []), ["Owner", "DB Link Name", "Host"])}
+            
+            <h3>Scheduler Jobs, Materialized Views & Partitions</h3>
+            <p style="font-size:13px; color:#475569;">Database infrastructure components excluding standard APPS-specific objects.</p>
+            {render_drilldown_table("View Infrastructure Components", safe_get(data, 'INFRA_OBJECTS', []), ["Infrastructure Component", "Definition Count"])}
+            
+            <h3>Top 10 Heaviest Database Segments</h3>
+            {render_table(top_10_tables, ["Database Object Segment", "Segment Type", "Consuming Space (GB)"])}
+            
+            <h3>Disaster Recovery (Data Guard) Topology</h3>
+            {render_table(db_dataguard, ["Archive Dest Name", "Status", "Instance Type", "Remote Address"])}
+            
+            <h3>RMAN Backup Throughput (7 Days)</h3>
+            {render_table(db_backups, ["Backup Job Status", "Completion Timestamp", "Output Bytes (GB)"])}
+            
+            <h3>Database Feature Licensing</h3>
+            {render_table(db_feature_usage, ["Feature Module Name", "Active", "First Seen", "Last Known Poll"])}
+            
+            <h3>Raw Init.ora Parameters</h3>
+            {render_table(db_params, ["Init Parameter", "Assigned Boundary"])}
+        </div>
+
+        <!-- SECTION 5: Database Alerts & Issues -->
+        <div id="alerts" class="section">
+            <div class="section-header">
+                <h2>Database Alerts & Issues</h2>
+            </div>
+            <p>Critical issues, invalid objects, and technical challenges identified by the rules engine that must be resolved prior to the upgrade.</p>
+            
+            <div class="challenges-box">
+                <ul>
+                    {''.join(f'<li>{c}</li>' for c in rules_challenges) if rules_challenges else '<li>No critical rule violations detected from parsed parameter footprint.</li>'}
+                </ul>
+            </div>
             
             <h3>Invalid Objects by Owner/Type</h3>
             {render_drilldown_table("View Invalid Schema Objects", safe_get(data, 'INVALID_OBJECTS_DETAIL', []), ["Schema Owner", "Object Name", "Object Type", "Status", "Last DDL Timestamp"])}
@@ -1660,87 +1466,52 @@ def build_html(data):
             <p style="font-size:13px; color:#475569;">Custom schemas (XX*, CUSTOM*) registered with Oracle AD utilities. These must be properly registered for online patching compatibility.</p>
             {render_table(safe_get(data, 'AD_REGISTERED_SCHEMAS', []), ["Schema Name", "Read Only"])}
             
-            <h3>Recently Applied Patches (Last 180 Days)</h3>
-            {render_table(safe_get(data, 'AD_APPLIED_PATCHES_RECENT', []), ["Patch Name", "Patch Type", "Applied Date"])}
+            <h3>Total EBS Customization Catalog</h3>
+            {render_drilldown_table("View Core Custom Database Extensions", safe_get(data, 'EBS_CUSTOM_OBJECTS', []), ["Custom Schema Owner", "Database Object Type", "Quantity Defined"])}
             
-            <h3>Applied Patches (Last 90 Days - Detailed)</h3>
-            <p style="font-size:13px; color:#475569;">Comprehensive patch application history extracted from AD schema for recent upgrade activity tracking.</p>
-            {render_drilldown_table("View Applied Patches in Last 90 Days", applied_patches_90_days, ["Patch Name", "Last Update Date", "Applied Flag"])}
-            
-            <h3>Database Links Detail</h3>
-            {render_table(safe_get(data, 'DB_LINKS_DETAIL', []), ["Owner", "DB Link Name", "Host"])}
-        </div>
-
-        <div id="workload" class="section">
-            <div class="section-header">
-                <h2>Database Workloads, High Availability & Process Engineering</h2>
-            </div>
-            
-            <h3>PCP (Parallel Concurrent Processing) Distribution</h3>
-            {render_table(pcp_managers, ["Queue Routing ID", "Primary Node", "Failover Node"])}
-            
-            <h3>Top 10 Heaviest Database Segments</h3>
-            <p style="font-size:13px; color:#475569;">Storage engineering constraints for tablespace reorganizations.</p>
-            {render_table(top_10_tables, ["Database Object Segment", "Segment Type", "Consuming Space (GB)"])}
-            
-            <h3>Disaster Recovery (Data Guard) Topology</h3>
-            {render_table(db_dataguard, ["Archive Dest Name", "Status", "Instance Type", "Remote Address"])}
-            
-            <h3>Database Internal Configuration Limits</h3>
-            {render_table(db_internal_state, ["Internal Architecture Component", "Value limit"])}
-
-            <h3>RMAN Backup Throughput (7 Days)</h3>
-            {render_table(db_backups, ["Backup Job Status", "Completion Timestamp", "Output Bytes (GB)"])}
-            
-            <h3>Oracle Database Enterprise Feature Licensing</h3>
-            <p style="font-size:13px; color:#475569;">Flags what native engine plugins are enabled for accurate cloud commercial modeling (e.g. Partitioning, Advanced Compression).</p>
-            {render_table(db_feature_usage, ["Feature Module Name", "Active", "First Seen", "Last Known Poll"])}
-
-            <h3>Infrastructure Engine Design</h3>
-            <p style="font-size:13px; color:#475569;">Scheduler objects that require careful handling during OS migration and upgrades.</p>
-            {render_table(infra_objects, ["Object Classification", "Volumes Configured"])}
-
-            <h3>System Workloads & Footprints</h3>
-            {render_table(workload_statistics, ["Performance Category", "Count Output"])}
-
-            <h3>Raw Init.ora Parameters Evaluated</h3>
-            {render_table(db_params, ["Init Parameter", "Assigned Boundary"])}
-        </div>
-
-        <div id="sizing" class="section">
-            <div class="section-header">
-                <h2>Target Sizing & Capacity Recommendations</h2>
-            </div>
-            <p>EBS 12.2 and Database 19c introduce new memory structures (specifically WebLogic managed servers and multitenant dictionary cache). The following architecture sizing is dynamically modeled on your extracted usage and hardware metrics:</p>
-            {sizing_analytics}
-            <h3 style="margin-top:20px;">Infrastructure Sizing Best Practices</h3>
+            <h3 style="margin-top:20px;">Support Notes & Best Practices</h3>
             <ul style="color: #334155; padding-left: 20px;">
-                <li style="margin-bottom: 8px;"><b>Weblogic Managed Servers (oacore):</b> Do not exceed 4GB per `oacore` Managed Server footprint due to JVM Garbage Collection pause limits. Scale out horizontally by adding more processes when active user concurrency peaks beyond capacity.</li>
-                <li style="margin-bottom: 8px;"><b>Output Post Processor (OPP):</b> For heavy XML Publisher loads (like large invoices), size the `FNDCPOPP` manager correctly per node. The recommended minimum is 2048MB per target process heap size via Context File updates.</li>
-                <li style="margin-bottom: 8px;"><b>Oracle Forms Heap:</b> 12.2 shifts Forms to the WLS architecture. Expect +30% server-side memory footprint per active Form session than what was seen under 11g/12.1.</li>
-                <li style="margin-bottom: 8px;"><b>Linux Database HugePages:</b> Whenever Target DB Memory (SGA) exceeds 30GB, enabling Linux HugePages is strictly required to prevent catastrophic kernel CPU swapping on Enterprise systems allocating 19c limits.</li>
+                <li style="margin-bottom: 8px;"><b>Best Practice:</b> Isolate custom database schemas into dedicated tablespaces separate from standard APPS data to simplify Edition-based Redefinition.</li>
+                <li style="margin-bottom: 8px;"><b>Best Practice:</b> Convert entirely to <code>txkCreateDirObject.sql</code> database directories before migrating the middle tier (MOS 2552181.1).</li>
+                <li style="margin-bottom: 8px;"><b>Best Practice:</b> If utilizing Oracle 23ai targets, thoroughly test bespoke PL/SQL for JSON relational duality interactions mapping against standard EBS tables (MOS 3042045.1).</li>
             </ul>
         </div>
-        
+
+        <!-- SECTION 6: Application TechStack -->
         <div id="techstack" class="section">
             <div class="section-header">
-                <h2>Application TechStack & Security Profiling</h2>
+                <h2>Application TechStack</h2>
             </div>
-            <p>EBS uses a tightly coupled technology stack containing internal JDKs, OC4J servers, and HTTP listeners. Any custom file deployed locally (outside patching standards) onto the App filesystem must be migrated.</p>
+            <p>EBS uses a tightly coupled technology stack containing internal JDKs, WebLogic servers, and HTTP listeners. This section captures the current versions and configurations.</p>
             
-            <h3>Base TechStack Context (12.1.3 Baseline)</h3>
+            <h3>Application File Systems (Mount Directories)</h3>
+            {render_table(ctx_dirs, ["Physical Node", "EBS File System Variable", "Target Mount / Path Location"])}
+            
+            <h3>Target JVM Services & Memory Allocations</h3>
+            <p style="font-size:13px; color:#475569;">Metrics necessary to calculate required Managed Servers and Heap Sizing per Node (oacore, forms, oafm).</p>
+            {render_table(ctx_jvm, ["Physical Node", "WebLogic / Form Server Service", "Allocated NPROCS (Processes)"])}
+            
+            <h3>JVM Memory Options</h3>
+            <p style="font-size:13px; color:#475569;">JVM memory parameters: -XX:PermSize, -XX:MaxPermSize, -Xms, -Xmx.</p>
+            {render_table(ctx_jvm_options, ["Physical Node", "JVM Service", "Memory Options"])}
+            
+            <h3>Ports, Keystores & Security Connectors</h3>
+            {render_table(ctx_ports, ["Physical Node", "Configuration Property Name", "Value Resolved"])}
+            
+            <h3>Database Networking & JDBC Profiles</h3>
+            {render_table(ctx_dbnet, ["Physical Node", "Network Property Name", "JDBC Description or URL Profile"])}
             """
     
     # Use ctx_dirs to build techstack information
     if len(ctx_dirs) > 0 and ctx_dirs[0][0] != 'N/A':
-        html += render_table(ctx_dirs, ["Physical Node", "Configuration Property", "Deployment Path / Value"])
-    else:
-        html += "<p style='color:#777; font-size:14px; font-style:italic;'>TechStack Context not available in Registry.</p>"
+        html += f"""
+            <h3>Base TechStack Context</h3>
+            {render_table(ctx_dirs, ["Physical Node", "Configuration Property", "Deployment Path / Value"])}
+        """
         
     html += f"""
-            
-            <h3>File-System Rogue Customizations (OS `find` extraction)</h3>
-            <p style="font-size:13px; color:#475569;">Includes unmanaged `b64` web logic, rogue custom images missing personalization hooks, and manually dropped `.class` payloads in `$JAVA_TOP` missing standards.</p>
+            <h3>File-System Custom Files (OS Discovery)</h3>
+            <p style="font-size:13px; color:#475569;">Includes unmanaged b64 web logic, rogue custom images, and manually dropped .class payloads.</p>
             {render_table(safe_get(data, 'APP_CUSTOM_FILES', []), ["File Search Target", "Discovered Quantity"])}
             
             <h3>Database User Password Enforcement (Profiles)</h3>
@@ -1750,15 +1521,82 @@ def build_html(data):
             {render_table(role_privs, ["Target Account", "Authorized Oracle Role", "Admin Option"])}
             
             <h3>DMZ (External Node) Trust Modeling</h3>
-            <p style="font-size:13px; color:#475569;">Validates whether Internet-facing web servers have appropriate NODE_TRUST_LEVEL limitations mapped against restricted responsibilities (e.g. iSupplier, iRecruitment).</p>
             {render_table(dmz_nodes, ["Profile Security Output", "FND System Profile Target", "Physical Node / Responsibility Resolved"])}
         </div>
-        
+
+        <!-- SECTION 7: Application Configurations -->
+        <div id="appconfig" class="section">
+            <div class="section-header">
+                <h2>Application Configurations</h2>
+            </div>
+            <p>Comprehensive application configuration including patches, concurrent processing, integrations, and profile settings.</p>
+            
+            <h3>Recently Applied Patches (Last 180 Days)</h3>
+            {render_table(safe_get(data, 'AD_APPLIED_PATCHES_RECENT', []), ["Patch Name", "Patch Type", "Applied Date"])}
+            
+            <h3>Applied Patches (Last 90 Days - Detailed)</h3>
+            <p style="font-size:13px; color:#475569;">Comprehensive patch application history extracted from AD schema for recent upgrade activity tracking.</p>
+            {render_drilldown_table("View Applied Patches in Last 90 Days", applied_patches_90_days, ["Patch Name", "Last Update Date", "Applied Flag"])}
+            
+            <h3>PCP (Parallel Concurrent Processing) Distribution</h3>
+            {render_table(pcp_managers, ["Queue Routing ID", "Primary Node", "Failover Node"])}
+            
+            <h3>EBS Workloads and Footprints</h3>
+            {render_table(workload_statistics, ["Performance Category", "Count Output"])}
+            
+            <h3>Concurrent Manager Queue Status</h3>
+            {render_table(conc_mgr_status, ["Queue ID", "Short Name", "Manager Name", "Target Node", "Max Allowed", "Running", "Run Tasks", "Pending Tasks", "Control State"])}
+            
+            <h3>Daily Concurrent Request Volume (30 Days)</h3>
+            {render_table(daily_conc_reqs, ["Execution Date", "Total Request Count"])}
+            
+            <h3>Top 100 Concurrent Programs by Execution Count</h3>
+            {render_drilldown_table("View Top 100 by Execution", top_100_conc_by_exec, ["Program Name", "Total Executions"])}
+            
+            <h3>Top 100 Concurrent Programs by Average Run Time</h3>
+            {render_drilldown_table("View Top 100 by Run Time", top_100_conc_by_time, ["Program Name", "Executions", "Avg Hours", "Max Hours", "Min Hours"])}
+            
+            <h3>Scheduled Concurrent Jobs</h3>
+            {render_drilldown_table("View Scheduled Jobs", scheduled_jobs, ["Request ID", "Parent ID", "Program Name", "Status", "Phase", "Schedule Type"])}
+            
+            <h3>URL Profiles & Endpoints</h3>
+            <p style="font-size:13px; color:#475569;">Critical URL profiles that define how users and integrations connect to the EBS application.</p>
+            {render_url_profiles_table(ebs_url_profiles)}
+            
+            <h3>Enterprise Integrations</h3>
+            <div class="grid-integrations">
+    """
+    for integ_name, integ_data in integrations.items():
+        color_var = integ_data['color']
+        status = integ_data['status']
+        desc = integ_data['desc']
+        roadmap = integ_data['roadmap']
+        html += f"""
+                <div class="integ-card" style="border-top-color: var({color_var})">
+                    <div class="integ-title">
+                        {integ_name}
+                        <span class="integ-status" style="background-color: var({color_var})">{status}</span>
+                    </div>
+                    <p style="font-size:14px; margin:0 0 15px 0; color:#475569;">{desc}</p>
+                    <div style="background:#F1F5F9; padding:12px; border-radius:6px; font-size:13px; color:#334155; border-left:3px solid var({color_var})">
+                        <b>Upgrade Action:</b> {roadmap}
+                    </div>
+                </div>
+        """
+
+    html += f"""
+            </div>
+            
+            <h3>Profile Options Changed (Last 48 Hours)</h3>
+            {render_drilldown_table("View Profile Changes", profile_changes_48h, ["Profile Name", "User Profile Name", "Level", "Value", "Changed At", "Changed By"])}
+        </div>
+
+        <!-- SECTION 8: Workflows & Integrations -->
         <div id="workflow" class="section">
             <div class="section-header">
-                <h2>Oracle Workflow & Output Delivery Integrations</h2>
+                <h2>Workflows & Integrations</h2>
             </div>
-            <p>Critical business transaction flows often stall during upgrades if SMTP/IMAP connections or XML generation templates fail on new Java Virtual Machines.</p>
+            <p>Oracle Workflow configuration, notification mailers, and output delivery integrations.</p>
             
             <div style="margin:20px 0; padding:15px; background:#F8FAFC; border-left:4px solid var(--primary-blue);">
                 <b>Workflow Administrator Role Configuration:</b> <code>{wf_admin_role}</code>
@@ -1768,18 +1606,12 @@ def build_html(data):
             {render_table(safe_get(data, 'WORKFLOW_MAILER', []), ["Component Parameter", "Network Binding"])}
             
             <h3>Custom EBS Workflow Item Types</h3>
-            {render_table(safe_get(data, 'CUSTOM_WORKFLOWS', []), ["Workflow Item Type", "Deplolyment Scope"])}
+            {render_table(safe_get(data, 'CUSTOM_WORKFLOWS', []), ["Workflow Item Type", "Deployment Scope"])}
 
             <h3>XML Publisher (XDO) Template Demands</h3>
             {render_table(safe_get(data, 'XML_PUBLISHER_DELIVERY', []), ["Engine", "Delivery Format", "Document Volumes"])}
-        </div>
-        
-        <div id="functional" class="section">
-            <div class="section-header">
-                <h2>Functional Application Data Footprint (Volume Syncing)</h2>
-            </div>
-            <p>Master configuration and Active Transaction scaling sizes mapping Purchasing, HR, GL, Projects, Payables, and Receivables activity.</p>
             
+            <h3>Functional Application Data Footprint</h3>
             {render_table(func_volumes, ["Information Tier", "EBS Module", "Functional Object / Document", "Total Deployed Storage", "Open Transactions"])}
             
             <h3>Global Setup: System Languages</h3>
@@ -1792,64 +1624,125 @@ def build_html(data):
             {render_table(users_created, ["Account Creation Month", "Volume Generated"])}
             
             <h3>Active Users with Responsibilities</h3>
-            <p style="font-size:13px; color:#475569;">Mapping of active users to their assigned responsibilities for security and access control analysis during upgrade.</p>
-            {render_drilldown_table("View Active Users with Responsibilities (up to 1000)", active_users_with_resp, ["User Name", "Responsibility Name"])}
+            {render_drilldown_table("View Active Users with Responsibilities", active_users_with_resp, ["User Name", "Responsibility Name"])}
             
             <h3>Organization Structure: Business Groups</h3>
             {render_table(data_business_groups, ["Business Group Name", "Org ID", "Date From", "Date To", "Legislation Code", "Currency Code"])}
             
-            <h3>Organization Structure: Set of Books / Ledgers</h3>
-            {render_table(data_set_of_books, ["SOB ID", "Name", "Short Name", "Currency Code", "Period Type", "Latest Opened Period", "Currency Name"])}
-            
-            <h3>Organization Structure: Legal Entities</h3>
-            {render_table(data_legal_entities, ["LE ID", "Legal Entity Name", "LE Identifier", "Country", "Address", "Effective From", "Effective To"])}
-            
             <h3>Organization Structure: Operating Units</h3>
             {render_table(data_operating_units, ["Org ID", "Operating Unit Name", "Short Code", "Business Group", "Date From", "Date To"])}
+        </div>
+
+        <!-- SECTION 9: CEMLIs & Customizations -->
+        <div id="cemli" class="section">
+            <div class="section-header">
+                <h2>CEMLIs & Customizations</h2>
+            </div>
+            <p>EBS 12.2 radically changes the Middle-tier. The Oracle 10.1.3 OC4J engine is entirely replaced by WebLogic Server (WLS 10.3.6+). Any custom Application code (Java, OAF, C, Perl) currently deployed on your App server must be rebuilt, recompiled, or heavily remediated.</p>
             
-            <h3>Organization Structure: Inventory Organizations</h3>
-            {render_table(data_inventory_orgs, ["Org ID", "Org Code", "Organization Name", "Operating Unit", "Master Org ID", "Status"])}
+            <div class="cemli-grid">
+                <div class="cemli-item">
+                    <div class="cemli-num">{forms_count}</div>
+                    <div class="cemli-label">Custom Oracle Forms</div>
+                </div>
+                <div class="cemli-item">
+                    <div class="cemli-num">{oaf_count}</div>
+                    <div class="cemli-label">OAF Mds Personalizations</div>
+                </div>
+                <div class="cemli-item" style="border-top: 5px solid var(--warning-amber);">
+                    <div class="cemli-num">{safe_get(data, 'APP_CUSTOM_FILES', [['0', '0']])[1][1] if len(safe_get(data, 'APP_CUSTOM_FILES', [])) > 1 else '0'}</div>
+                    <div class="cemli-label">Rogue HTML/image Overrides</div>
+                </div>
+                <div class="cemli-item" style="border-top: 5px solid var(--danger-red);">
+                    <div class="cemli-num">{safe_get(data, 'APP_CUSTOM_FILES', [['0', '0']])[3][1] if len(safe_get(data, 'APP_CUSTOM_FILES', [])) > 3 else '0'}</div>
+                    <div class="cemli-label">Custom Java Class Drops</div>
+                </div>
+            </div>
+
+            <h3>Custom Concurrent Programs</h3>
+            <p style="color:red; font-size:13px; font-weight:600; margin-top:0;">&#9888; Action Required: All 'Java' and 'Spawned' (C/C++) executables must be recompiled on the target OS.</p>
+            {render_drilldown_table("Custom Concurrent Programs List", cemli_cp, ["Application Module", "Program Name", "Executable Name", "Execution Method"])}
             
-            <h3>Module Data Volumes: Payables (AP)</h3>
-            {render_table(data_ap_volumes, ["AP Object", "Record Count"])}
+            <div class="grid-summary">
+                <div class="metric-card" style="border-left-color: var(--warning-amber)">
+                    <div class="metric-title">Host Programs</div>
+                    <div class="metric-value">{len(cemli_conc_host) if cemli_conc_host and cemli_conc_host[0][0] != 'N/A' else 0}</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--primary-blue)">
+                    <div class="metric-title">Java Concurrent</div>
+                    <div class="metric-value">{len(cemli_conc_java) if cemli_conc_java and cemli_conc_java[0][0] != 'N/A' else 0}</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--danger-red)">
+                    <div class="metric-title">Oracle Reports</div>
+                    <div class="metric-value">{len(cemli_conc_reports) if cemli_conc_reports and cemli_conc_reports[0][0] != 'N/A' else 0}</div>
+                </div>
+                <div class="metric-card" style="border-left-color: var(--success-green)">
+                    <div class="metric-title">SQL*Plus Programs</div>
+                    <div class="metric-value">{len(cemli_conc_sqlplus) if cemli_conc_sqlplus and cemli_conc_sqlplus[0][0] != 'N/A' else 0}</div>
+                </div>
+            </div>
             
-            <h3>Module Data Volumes: Receivables (AR)</h3>
-            {render_table(data_ar_volumes, ["AR Object", "Record Count"])}
+            <h3>Forms & OAF Modifications</h3>
+            {render_drilldown_table("Custom Oracle Forms (fmb)", safe_get(data, 'CEMLI_FORMS_AND_PAGES', []), ["Application Module", "Form Name", "User Form Name"])}
             
-            <h3>Module Data Volumes: General Ledger (GL)</h3>
-            {render_table(data_gl_volumes, ["GL Object", "Record Count"])}
+            <h3>Custom OAF Pages</h3>
+            {render_drilldown_table("Custom OAF Page Components", cemli_oaf_pages, ["Page Name", "Full Path", "Attribute Name", "Attribute Value"])}
             
-            <h3>Module Data Volumes: Purchasing (PO)</h3>
-            {render_table(data_po_volumes, ["PO Object", "Record Count"])}
+            <h3>OAF Personalizations / Customizations</h3>
+            {render_drilldown_table("OAF Personalizations", cemli_oaf_personalizations, ["Document Name", "Full Path", "Last Update Date"])}
+
+            <h3>Custom FND Objects (Detailed)</h3>
+            {render_drilldown_table("Custom Lookups", cemli_lookups, ["App ID", "Lookup Type", "Application Name", "Meaning"])}
+            {render_drilldown_table("Custom Menus", cemli_menus, ["Menu ID", "Menu Name", "User Menu Name", "Application Name"])}
+            {render_drilldown_table("Custom Messages", cemli_messages, ["App ID", "Message Name", "Application Name", "Message Text"])}
+            {render_drilldown_table("Custom Profiles", cemli_profiles, ["Profile ID", "Profile Name", "User Profile Name", "Application Name"])}
+            {render_drilldown_table("Custom Request Groups", cemli_request_groups, ["Group ID", "Group Name", "Application Name", "Description"])}
+            {render_drilldown_table("Custom Request Sets", cemli_request_sets, ["Set ID", "Set Name", "User Set Name", "Application Name"])}
+            {render_drilldown_table("Custom Value Sets", cemli_value_sets, ["Value Set ID", "Value Set Name", "Description", "Validation Type"])}
+
+            <h3>Custom Workflow Definitions</h3>
+            {render_drilldown_table("Custom Workflow Definitions", custom_workflows, ["Item Type", "Display Name"])}
+            {render_drilldown_table("BIP / XML Publisher Templates", xml_publisher, ["XML Template Code", "Output Type"])}
             
-            <h3>Module Data Volumes: Order Management (OM)</h3>
-            {render_table(data_om_volumes, ["OM Object", "Record Count"])}
+            <h3>Flagged Files for Upgrade Analysis</h3>
+            {render_drilldown_table("View Flagged Custom Files (AD_FILES)", flagged_files, ["Application", "Directory", "Filename", "Version", "Translation Level", "Version Date"])}
             
-            <h3>Module Data Volumes: Inventory (INV)</h3>
-            {render_table(data_inv_volumes, ["INV Object", "Record Count"])}
+            <h3>Custom Application Tops</h3>
+            {render_table(custom_top_files, ["APPL_TOP Name", "Base Path", "Applications System"])}
             
-            <h3>Module Data Volumes: Human Resources (HR)</h3>
-            {render_table(data_hr_volumes, ["HR Object", "Record Count"])}
+            <h3>Custom Files Distribution by Type</h3>
+            {render_table(ad_files_by_type, ["File Extension", "Count"])}
             
-            <h3>Module Data Volumes: Fixed Assets (FA)</h3>
-            {render_table(data_fa_volumes, ["FA Object", "Record Count"])}
+            <h3>Recently Patched Files (Last 90 Days)</h3>
+            {render_drilldown_table("View Recently Patched Files", patched_files_recent, ["Application", "Filename", "Patch Name", "Applied Date"])}
             
-            <h3>Module Data Volumes: Cost Management (CM)</h3>
-            {render_table(data_cm_volumes, ["CM Object", "Record Count"])}
+            <h3>CEMLI: Custom Applications</h3>
+            {render_drilldown_table("View Custom Applications", cemli_custom_apps, ["App ID", "Application Name", "Short Name", "Base Path", "Created Date"])}
             
-            <h3>Module Data Volumes: Process Manufacturing (OPM)</h3>
-            {render_table(data_opm_volumes, ["OPM Object", "Record Count"])}
+            <h3>CEMLI: Custom Alerts</h3>
+            {render_drilldown_table("View Custom Alerts", cemli_custom_alerts, ["Alert Name", "Application Name", "Alert Type", "Status"])}
             
-            <h3>Module Data Volumes: Pricing (QP)</h3>
-            {render_table(data_pricing_volumes, ["Pricing Object", "Record Count"])}
+            <h3>CEMLI: Custom Database Objects</h3>
+            {render_drilldown_table("Custom Functions", cemli_db_functions, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Packages", cemli_db_packages, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Procedures", cemli_db_procedures, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Tables", cemli_db_tables, ["Table Name", "Owner", "Tablespace", "Num Rows", "Partitioned", "Created"])}
+            {render_drilldown_table("Custom Views", cemli_db_views, ["View Name", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Indexes", cemli_db_indexes, ["Index Name", "Type", "Owner", "Status", "Table Name", "Uniqueness"])}
+            {render_drilldown_table("Custom Sequences", cemli_db_sequences, ["Sequence Name", "Owner", "Min Value", "Max Value", "Increment", "Last Number"])}
+            {render_drilldown_table("Custom Synonyms", cemli_db_synonyms, ["Synonym Name", "Owner", "Table Owner", "Table Name", "DB Link"])}
+            {render_drilldown_table("Custom Triggers", cemli_db_triggers, ["Trigger Name", "Owner", "Table Owner", "Table Name", "Event", "Status"])}
+            {render_drilldown_table("Custom Types", cemli_db_types, ["Object Name", "Type", "Owner", "Status", "Created", "Last DDL"])}
+            {render_drilldown_table("Custom Materialized Views", cemli_db_mviews, ["MView Name", "Owner", "Container", "Refresh Mode", "Refresh Method", "Staleness"])}
+            {render_drilldown_table("Custom Queues", cemli_db_queues, ["Queue Name", "Owner", "Queue Table", "Type", "Enqueue", "Dequeue"])}
+            {render_drilldown_table("Custom LOB Segments", cemli_db_lobs, ["Table Name", "Column Name", "Owner", "Segment Name", "Tablespace", "Chunk Size"])}
             
-            <h3>Profile Options Changed (Last 48 Hours)</h3>
-            <p style="font-size:13px; color:#475569;">Recent profile option changes that may indicate active configuration or troubleshooting activities.</p>
-            {render_drilldown_table("View Profile Changes", profile_changes_48h, ["Profile Name", "User Profile Name", "Level", "Value", "Changed At", "Changed By"])}
+            <h3>CEMLI: Custom Workflows</h3>
+            {render_drilldown_table("Custom Workflow Definitions", cemli_workflows, ["Item Type", "Display Name", "Persistence Type", "Persistence Days", "Activity Count"])}
             
-            <h3>Applied Patches (Last 30 Days)</h3>
-            <p style="font-size:13px; color:#475569;">Recent patch application history for tracking upgrade and maintenance activities.</p>
-            {render_drilldown_table("View Applied Patches", applied_patches_30d, ["Patch Name", "Patch Type", "Applied Date", "Applied Flag"])}
+            <h3>CEMLI: XML Publisher / BI Publisher</h3>
+            {render_drilldown_table("XML Publisher Templates", cemli_xml_templates, ["App ID", "Template Code", "Template Name", "Description", "Application", "Type", "Status"])}
+            {render_drilldown_table("Data Definitions", cemli_data_definitions, ["App ID", "Data Source Code", "Data Source Name", "Description", "Application", "Status", "Created"])}
         </div>
 
         <div id="risks" class="section">

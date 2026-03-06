@@ -185,19 +185,17 @@ where node_name <> 'AUTHENTICATION';
 prompt [SECTION_END:EBS_NODES]
 
 prompt [SECTION_START:CTX_DIRECTORIES]
-select node_name ||'|appl_top|'|| EXTRACTVALUE(XMLType(TEXT),'(//APPL_TOP)[1]')
+select node_name ||'|appl_top|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/oa_environments/APPL_TOP'), EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="APPL_TOP"])[1]'))
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
-union all
-select node_name ||'|common_top|'|| EXTRACTVALUE(XMLType(TEXT),'(//COMMON_TOP)[1]')
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|common_top|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/oa_environments/COMMON_TOP'), EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="COMMON_TOP"])[1]'))
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
-union all
-select node_name ||'|instance_top|'|| EXTRACTVALUE(XMLType(TEXT),'(//config_home)[1]')
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|instance_top|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/oa_environments/inst_top'), NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/oa_environments/INST_TOP'), EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="config_home"])[1]')))
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
@@ -206,31 +204,27 @@ and (node_name, last_update_date) in
 prompt [SECTION_END:CTX_DIRECTORIES]
 
 prompt [SECTION_START:CTX_PORTS_SECURITY]
-select node_name ||'|port_pool|'|| EXTRACTVALUE(XMLType(TEXT),'(//PORT_POOL)[1]')
+select node_name ||'|port_pool|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/PORT_POOL'), EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="PORT_POOL" or local-name()="s_port_pool"])[1]'))
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
-union all
-select node_name ||'|shared_file_system|'|| EXTRACTVALUE(XMLType(TEXT),'(//shared_file_system)[1]')
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|shared_file_system|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/shared_file_system'), EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="shared_file_system" or local-name()="s_shared_file_system"])[1]'))
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
-union all
-select node_name ||'|webport|'|| EXTRACTVALUE(XMLType(TEXT),'(//web_port)[1]')
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|webport|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/oa_web/web_port'), EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="web_port" or local-name()="s_webport"])[1]'))
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
-union all
-select node_name ||'|webssl_port|'|| EXTRACTVALUE(XMLType(TEXT),'(//web_ssl_port)[1]')
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|webssl_port|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/oa_web/web_ssl_port'), EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="web_ssl_port" or local-name()="s_webssl_port"])[1]'))
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name)
-union all
-select node_name ||'|Active_Port|'|| EXTRACTVALUE(XMLType(TEXT),'(//activewebport)[1]')
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|Active_Port|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'/oa_context/oa_web/activewebport'), EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="activewebport" or local-name()="s_active_webport"])[1]'))
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
@@ -258,24 +252,76 @@ and (node_name, last_update_date) in
 prompt [SECTION_END:CTX_DB_NETWORKING]
 
 prompt [SECTION_START:CTX_JVM_SERVICES]
-select node_name ||'|oacore_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//oacore_nprocs)')
+select node_name ||'|oacore_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oacore_nprocs"])[1]'), 'N/A')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
-union all
-select node_name ||'|forms_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//forms_nprocs)')
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|forms_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="forms_nprocs"])[1]'), 'N/A')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name)
-union all
-select node_name ||'|oafm_nprocs|'|| EXTRACTVALUE(XMLType(TEXT),'(//oafm_nprocs)')
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|oafm_nprocs|'|| NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oafm_nprocs"])[1]'), 'N/A')
 from apps.fnd_oam_context_files
 where status = 'S' and ctx_type = 'A'
 and (node_name, last_update_date) in 
-    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' group by node_name);
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
 prompt [SECTION_END:CTX_JVM_SERVICES]
+
+prompt [SECTION_START:CTX_JVM_OPTIONS]
+select node_name ||'|oacore_jvm_options|'|| 
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_oacore_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oacore_jvm_start_options"])[1]')), 
+                  '-XX:PermSize=[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_oacore_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oacore_jvm_start_options"])[1]')), 
+                  '-XX:MaxPermSize=[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_oacore_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oacore_jvm_start_options"])[1]')), 
+                  '-Xms[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_oacore_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oacore_jvm_start_options"])[1]')), 
+                  '-Xmx[0-9]+[mMgG]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|forms_jvm_options|'|| 
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_forms_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="forms_jvm_start_options"])[1]')), 
+                  '-XX:PermSize=[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_forms_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="forms_jvm_start_options"])[1]')), 
+                  '-XX:MaxPermSize=[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_forms_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="forms_jvm_start_options"])[1]')), 
+                  '-Xms[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_forms_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="forms_jvm_start_options"])[1]')), 
+                  '-Xmx[0-9]+[mMgG]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+select node_name ||'|oafm_jvm_options|'|| 
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_oafm_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oafm_jvm_start_options"])[1]')), 
+                  '-XX:PermSize=[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_oafm_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oafm_jvm_start_options"])[1]')), 
+                  '-XX:MaxPermSize=[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_oafm_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oafm_jvm_start_options"])[1]')), 
+                  '-Xms[0-9]+[mMgG]') ||' '||
+    REGEXP_SUBSTR(NVL(EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="s_oafm_jvm_start_options"])[1]'), 
+                      EXTRACTVALUE(XMLType(TEXT),'(//*[local-name()="oafm_jvm_start_options"])[1]')), 
+                  '-Xmx[0-9]+[mMgG]')
+from apps.fnd_oam_context_files
+where status = 'S' and ctx_type = 'A'
+and (node_name, last_update_date) in 
+    (select node_name, max(last_update_date) from apps.fnd_oam_context_files where status = 'S' and ctx_type = 'A' group by node_name);
+prompt [SECTION_END:CTX_JVM_OPTIONS]
 
 prompt [SECTION_START:EBS_INTEGRATIONS_PROFILES]
 SELECT fo.profile_option_name ||'|'|| NVL(fv.profile_option_value, 'NOT_DEFINED')
@@ -651,11 +697,11 @@ select 'DFFS' ||'|'|| title from apps.fnd_descriptive_flexs_vl where descriptive
 prompt [SECTION_END:CUSTOM_FND_OBJECTS]
 
 prompt [SECTION_START:INFRA_OBJECTS]
-select 'SCHEDULER_JOBS' ||'|'|| count(*) from dba_scheduler_jobs where owner not in ('SYS','SYSTEM')
+select 'SCHEDULER_JOBS' ||'|'|| count(*) from dba_scheduler_jobs where owner not in ('SYS','SYSTEM','EXFSYS','ORACLE_OCM','MDSYS','XDB','WMSYS','DBSNMP','APEX_040200','APEX_050000','APEX_030200')
 union all
-select 'MATERIALIZED_VIEWS' ||'|'|| count(*) from dba_mviews where owner not in ('SYS','SYSTEM')
+select 'MATERIALIZED_VIEWS' ||'|'|| count(*) from dba_mviews where owner not in ('SYS','SYSTEM','MDSYS','XDB','WMSYS','DBSNMP','APEX_040200','APEX_050000')
 union all
-select 'PARTITIONED_TABLES' ||'|'|| count(*) from dba_part_tables where owner not in ('SYS','SYSTEM');
+select 'PARTITIONED_TABLES' ||'|'|| count(*) from dba_part_tables where owner not in ('SYS','SYSTEM','XDB','MDSYS','WMSYS') and owner not in ('AP','AR','GL','PO','INV','HR','PA','WIP','MRP','BOM','FND','AD','XLA','CE','ONT','OE','QP','WSH','ASO','IBE','OKC','OKE','CS','CSD','CN','IGC','IGS','IGW','IGI','IGF','PJI','WF','ALR','FV','JTF','HZ','ICX','AMS','IEX','IEM','IBY','IEU','CCT','CZ','GMD','GME','GMI','GMF','GML','GMP','GMS');
 prompt [SECTION_END:INFRA_OBJECTS]
 
 prompt [SECTION_START:WORKLOAD_STATISTICS]
